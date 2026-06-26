@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rad Defense — Radiation Tower Defense</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#10151d; font-family:Arial,sans-serif; color:#e8eef5; display:flex; flex-direction:column; min-height:100vh; align-items:center; }
+#game { padding:12px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+#hud { display:flex; gap:18px; align-items:center; font-size:14px; font-weight:700; }
+#hud .stat { background:#1a212c; border:1px solid #2a3342; border-radius:8px; padding:7px 14px; }
+#hud .stat .v { color:#ffd54f; }
+#hud .stat.lives .v { color:#ff8a80; }
+#hud .stat.energy .v { color:#69f0ae; }
+#palette { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:664px; }
+.tcard { width:84px; background:#222b3a; border:2px solid #36425a; border-radius:8px; padding:7px 4px; cursor:pointer; text-align:center; transition:transform .1s,border-color .12s,opacity .12s; }
+.tcard:hover { transform:translateY(-3px); }
+.tcard.sel { border-color:#ffd54f; box-shadow:0 0 10px rgba(255,213,79,.5); }
+.tcard.poor { opacity:.45; }
+.tcard .ic { font-size:22px; }
+.tcard .nm { font-size:11px; font-weight:700; margin-top:2px; }
+.tcard .cost { font-size:10px; color:#69f0ae; margin-top:1px; }
+.tcard .desc { font-size:8.5px; color:#9fb0c7; margin-top:2px; line-height:1.2; }
+#board { border:2px solid #2a3342; border-radius:6px; background:#0d1117; cursor:pointer; display:block; }
+#bar { display:flex; gap:8px; align-items:center; }
+.btn { padding:9px 18px; border:none; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-go { background:#2e7d32; color:#fff; } .btn-go:hover { background:#388e3c; }
+.btn-go:disabled { background:#555; cursor:default; }
+.btn-ghost { background:#37424f; color:#cfd8e6; } .btn-ghost:hover { background:#46535f; }
+#hint { font-size:12px; color:#8aa0bf; min-height:18px; }
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; z-index:99; padding:18px; }
+.overlay.show { display:flex; }
+.ov-box { background:#1a212c; border:1px solid #2a3342; border-radius:12px; padding:26px 32px; max-width:560px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+.ov-box h2 { color:#ffd54f; font-size:24px; margin-bottom:10px; text-align:center; }
+.ov-box p, .ov-box li { color:#c4cedd; font-size:13px; line-height:1.55; }
+.ov-box ul { margin:8px 0 8px 18px; }
+.ov-box button { display:block; width:100%; margin-top:14px; padding:12px; background:#2e7d32; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; }
+.ov-box button:hover { background:#388e3c; }
+</style>
+</head>
+<body>
+
+<div id="game">
+  <div id="hud">
+    <div class="stat energy">Energy <span class="v" id="hp-energy">0</span> MWe</div>
+    <div class="stat lives">Lives <span class="v" id="hp-lives">0</span></div>
+  </div>
+
+  <div id="palette"></div>
+
+  <canvas id="board" width="648" height="360"></canvas>
+
+  <div id="bar">
+    <button class="btn btn-ghost" id="cancel-btn">Deselect</button>
+    <div id="hint">Pick a tower, then click a cell to build. Generators (SMR) make energy.</div>
+  </div>
+</div>
+
+<div class="overlay show" id="intro">
+  <div class="ov-box">
+    <h2>Rad Defense</h2>
+    <p>Radiation tower-defense. Enemies march in from the right — stop them before they cross the left edge. Build <b>generators</b> for energy and <b>radiation sources</b> to attack, matching the radiation to the threat.</p>
+    <ul>
+      <li><b>α Alpha</b> — slow, <b>short range</b>, massive single hit. Useless vs shielded armor.</li>
+      <li><b>β Beta</b> — moderate rate &amp; damage, full lane.</li>
+      <li><b>γ Gamma</b> — fast, low damage, <b>pierces the whole lane</b> — and the only thing that hurts <b>Lead-Lined</b> heavies.</li>
+      <li><b>n Neutron</b> — ignores armor; a neutron kill on a <b>☢ fissile</b> enemy triggers <b>fission</b> — 3 neutrons fly off at random angles and can chain-react across the field.</li>
+      <li><b>SMR / Fusion</b> generate energy; <b>CT Scan</b> fires an X-ray fan; <b>Trench</b> slows ground enemies; <b>Security</b> guards a 3×3 from thieves; <b>Nuke</b> wipes a 2×2 (those tiles lock).</li>
+      <li><b>Activity×2</b> — click onto a source to double its fire rate. <b>e⁻ Cloud</b> &amp; <b>Brems.</b> are <b>lane tiles</b>: place them in front of a Beta source — β beams passing through the cloud start to wander across lanes, and through the bremsstrahlung target turn into piercing X-rays.</li>
+    </ul>
+    <p>Threats: <b>🦠 swarms</b>, the <b>📡 scout</b> (heads for your weakest lane), <b>🦅 thieves</b> (fly in to steal a tower — block with Security), <b>⊟ control rods</b> (absorb neutrons, stopping fission chains), and rare <b>Rad-Mutants</b> (any hit can mutate an enemy). Clear the assault to win; a breach of the left edge costs a life.</p>
+    <button id="intro-btn">Start Defending</button>
+  </div>
+</div>
+
+<div class="overlay" id="end">
+  <div class="ov-box" style="text-align:center">
+    <h2 id="end-title">Victory!</h2>
+    <p id="end-msg"></p>
+    <button id="end-btn">Play Again</button>
+  </div>
+</div>
+
+<!-- CTRP-THEME-START -->
+<style>
+  :root {
+    --ctrp-green:      #166534;
+    --ctrp-green-mid:  #15803d;
+    --ctrp-border:     #bbf7d0;
+    --ctrp-muted:      #64748b;
+  }
+  .ctrp-header {
+    background: white;
+    border-bottom: 2px solid var(--ctrp-green);
+    padding: 10px 22px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    flex-shrink: 0;
+  }
+  .ctrp-header img.ctrp-logo { height: 46px; width: auto; flex: 0 0 auto; }
+  .ctrp-header .ctrp-title-block { flex: 1; min-width: 0; }
+  .ctrp-header h1.ctrp-title {
+    margin: 0; color: var(--ctrp-green); font-size: 18px; font-weight: 700;
+    line-height: 1.2;
+  }
+  .ctrp-header .ctrp-subtitle { color: var(--ctrp-muted); font-size: 12px; margin-top: 2px; }
+  .ctrp-footer {
+    padding: 10px 22px; color: #888; font-size: 11px; text-align: center;
+    border-top: 1px solid var(--ctrp-border); background: white; flex-shrink: 0;
+  }
+</style>
+<script>
+(function () {
+  var LOGO = "data:image/png;base64,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";
+  var TITLE    = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML =
+        (LOGO ? '<img class="ctrp-logo" src="' + LOGO + '" alt="CTRP">' : '') +
+        '<div class="ctrp-title-block">' +
+          '<h1 class="ctrp-title">' + TITLE + '</h1>' +
+          (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') +
+        '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML =
+        "&copy; " + new Date().getFullYear() +
+        " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; " +
+        "Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; " +
+        "King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+
+<script>
+// ============================================================
+//  RAD DEFENSE — radiation tower defense (Phase 1 MVP)
+// ============================================================
+var COLS = 9, ROWS = 5, CELL = 72;
+var BW = COLS * CELL, BH = ROWS * CELL;
+var canvas = document.getElementById('board');
+var ctx = canvas.getContext('2d');
+
+// ---- sprite loader (PNG with drawn fallback) ----
+var SPRITES = {};
+var SPRITE_FILES = {
+  tower_smr:'tower_smr.png', tower_fusion:'tower_fusion.png', tower_alpha:'tower_alpha.png',
+  tower_beta:'tower_beta.png', tower_gamma:'tower_gamma.png', tower_neutron:'tower_neutron.png',
+  tower_ct:'tower_ct.png', tower_security:'tower_security.png',
+  tile_trench:'tile_trench.png', tile_ecloud:'tile_ecloud.png', tile_brems:'tile_brems.png',
+  enemy_basic:'enemy_basic.png', enemy_heavy:'enemy_heavy.png', enemy_fissile:'enemy_fissile.png',
+  enemy_swarm:'enemy_swarm.png', enemy_scout:'enemy_scout.png',
+  enemy_controlrod:'enemy_controlrod.png', enemy_thief:'enemy_thief.png',
+  enemy_mutant:'enemy_mutant.png'
+};
+(function loadSprites(){
+  for (var k in SPRITE_FILES) {
+    var img = new Image();
+    img.src = 'td_sprites/' + SPRITE_FILES[k];
+    SPRITES[k] = img;
+  }
+})();
+function spriteReady(key){ var s = SPRITES[key]; return s && s.complete && s.naturalWidth > 0; }
+
+// ---- definitions ----
+var TOWERS = {
+  smr:    { role:'gen',  cost:50,  hp:200, ic:'⚛', nm:'SMR',     col:'#43a047', desc:'+energy', gen:25, genCd:4.0 },
+  fusion: { role:'gen',  cost:175, hp:260, ic:'✦', nm:'Fusion',  col:'#26c6da', desc:'++energy', gen:60, genCd:4.0 },
+  alpha:  { role:'fire', cost:100, hp:120, ic:'α', nm:'Alpha',   col:'#ff7043', desc:'short, huge', fireCd:1.6, dmg:80, range:2.4*CELL, pierce:false, proj:'#ff7043' },
+  beta:   { role:'fire', cost:75,  hp:120, ic:'β', nm:'Beta',    col:'#42a5f5', desc:'balanced',  fireCd:0.9, dmg:28, range:BW, pierce:false, proj:'#64b5f6' },
+  gamma:  { role:'fire', cost:125, hp:120, ic:'γ', nm:'Gamma',   col:'#ffca28', desc:'pierces!',  fireCd:0.45,dmg:14, range:BW, pierce:true,  proj:'#fff176' },
+  neutron:{ role:'fire', cost:110, hp:120, ic:'n', nm:'Neutron', col:'#ce93d8', desc:'ignores armor; fissions', fireCd:1.1, dmg:35, range:BW, pierce:false, proj:'#ce93d8' },
+  ct:     { role:'fire', cost:175, hp:120, ic:'⊏', nm:'CT Scan', col:'#80deea', desc:'X-ray fan ×3', fireCd:1.3, dmg:16, range:BW, pierce:true, proj:'#80deea', ptype:'xray', angles:[0, Math.PI/8, -Math.PI/8] },
+  trench: { role:'floor',cost:25,  hp:0,   ic:'░', nm:'Trench',  col:'#8d6e63', desc:'slows ground' },
+  security:{ role:'util',cost:60,  hp:150, ic:'🔒', nm:'Security', col:'#90caf9', desc:'guards 3×3 vs thief' },
+  nuke:   { role:'active',cost:250, ic:'💥', nm:'Nuke', col:'#ff5252', desc:'2×2 wipe; tiles locked' },
+  doubler:{ role:'upgrade',cost:75, ic:'⏫', nm:'Activity×2', col:'#ffd54f', desc:'on a source: 2× fire rate', target:'fire' },
+  ecloud: { role:'floor', cost:60, ic:'🌫', nm:'e⁻ Cloud',  col:'#80cbc4', desc:'lane tile: β wanders through it' },
+  brems:  { role:'floor', cost:90, ic:'⚡', nm:'Brems.',     col:'#b39ddb', desc:'lane tile: β → piercing X-ray' }
+};
+var TOWER_KEYS = ['smr','fusion','alpha','beta','gamma','neutron','ct','trench','security','nuke','doubler','ecloud','brems'];
+
+// resist = fraction of damage BLOCKED, per radiation type
+var ENEMIES = {
+  basic:  { hp:100, speed:20, sabotage:22, spr:'enemy_basic',   ic:'☣', col:'#8d6e63', r:26, resist:{} },
+  heavy:  { hp:430, speed:12, sabotage:30, spr:'enemy_heavy',   ic:'🛡', col:'#546e7a', r:30, resist:{ alpha:1.0, beta:0.7, gamma:0, neutron:0 } },
+  fissile:{ hp:110, speed:13, sabotage:26, spr:'enemy_fissile', ic:'☢', col:'#7e57c2', r:28, resist:{}, fissile:true },
+  swarm:  { hp:25,  speed:34, sabotage:8,  spr:'enemy_swarm',   ic:'🦠', col:'#26a69a', r:17, resist:{} },
+  scout:  { hp:80,  speed:26, sabotage:14, spr:'enemy_scout',   ic:'📡', col:'#ffb74d', r:24, resist:{}, scout:true },
+  controlrod:{ hp:220, speed:14, sabotage:24, spr:'enemy_controlrod', ic:'⊟', col:'#455a64', r:28, resist:{ neutron:1.0 }, absorb:true },
+  thief:  { hp:70,  speed:60, sabotage:0,  spr:'enemy_thief',   ic:'🦅', col:'#5c6bc0', r:22, resist:{}, fly:true }
+};
+
+var WAVES = [
+  ['basic','basic','basic','swarm','swarm','swarm','basic'],
+  ['basic','heavy','basic','scout','swarm','swarm','basic','thief','swarm'],
+  ['basic','heavy','fissile','fissile','scout','controlrod','swarm','swarm','thief','heavy','basic'],
+  ['heavy','fissile','fissile','controlrod','swarm','swarm','swarm','thief','scout','fissile','fissile','controlrod','heavy']
+];
+
+var MUT_CHANCE = 0.02;                 // per-enemy, rolled once on first hit
+var FISSION_DMG = 130, FISSION_SPD = 320;
+
+// ---- state ----
+var energy, lives, gs;                     // gs: 'idle' | 'playing' | 'won' | 'lost'
+var grid = [];                              // grid[r][c] = tower/util or null
+var floors = [];                            // floors[r][c] = floor obstacle (trench) or null
+var enemies = [], projectiles = [];
+var sel = null, mouseCell = null;
+var spawnQueue = [], spawnTimer = 0, eid = 0;
+var passiveTimer = 0, nukeFlash = null;
+
+function resetState() {
+  energy = 175; lives = 5; gs = 'idle';
+  grid = []; floors = [];
+  for (var r = 0; r < ROWS; r++) { grid[r] = []; floors[r] = []; for (var c = 0; c < COLS; c++) { grid[r][c] = null; floors[r][c] = null; } }
+  enemies = []; projectiles = []; sel = null; spawnQueue = []; spawnTimer = 0; passiveTimer = 0;
+  document.getElementById('end').classList.remove('show');
+  buildPalette();
+  updateHUD();
+}
+function startGame() {
+  resetState();
+  // one continuous stream — all waves concatenated, difficulty ramps as it goes
+  spawnQueue = [];
+  for (var w = 0; w < WAVES.length; w++) for (var i = 0; i < WAVES[w].length; i++) spawnQueue.push(WAVES[w][i]);
+  spawnTimer = 3;          // brief beat to place your first towers
+  gs = 'playing';
+  setHint('Defend! Build generators and sources as the horde advances.');
+}
+
+// ============================================================
+//  PALETTE
+// ============================================================
+function buildPalette() {
+  var html = '';
+  for (var i = 0; i < TOWER_KEYS.length; i++) {
+    var k = TOWER_KEYS[i], t = TOWERS[k];
+    html += '<div class="tcard" data-k="' + k + '"><div class="ic" style="color:' + t.col + '">' + t.ic + '</div>' +
+            '<div class="nm">' + t.nm + '</div><div class="cost">' + t.cost + ' MWe</div>' +
+            '<div class="desc">' + t.desc + '</div></div>';
+  }
+  document.getElementById('palette').innerHTML = html;
+  var cards = document.querySelectorAll('.tcard');
+  for (var j = 0; j < cards.length; j++) cards[j].addEventListener('click', function() {
+    var k = this.getAttribute('data-k');
+    sel = (sel === k) ? null : k;
+    refreshPalette();
+  });
+}
+function refreshPalette() {
+  var cards = document.querySelectorAll('.tcard');
+  for (var i = 0; i < cards.length; i++) {
+    var k = cards[i].getAttribute('data-k');
+    cards[i].className = 'tcard' + (sel === k ? ' sel' : '') + (energy < TOWERS[k].cost ? ' poor' : '');
+  }
+}
+
+// ============================================================
+//  PLACEMENT
+// ============================================================
+canvas.addEventListener('mousemove', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var mx = (e.clientX - rect.left) * canvas.width / rect.width;
+  var my = (e.clientY - rect.top) * canvas.height / rect.height;
+  var c = Math.floor(mx / CELL), r = Math.floor(my / CELL);
+  mouseCell = (c >= 0 && c < COLS && r >= 0 && r < ROWS) ? { r:r, c:c } : null;
+});
+canvas.addEventListener('mouseleave', function() { mouseCell = null; });
+canvas.addEventListener('click', function(e) {
+  if (!sel || gs === 'won' || gs === 'lost') return;
+  var rect = canvas.getBoundingClientRect();
+  var mx = (e.clientX - rect.left) * canvas.width / rect.width;
+  var my = (e.clientY - rect.top) * canvas.height / rect.height;
+  var c = Math.floor(mx / CELL), r = Math.floor(my / CELL);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  var t = TOWERS[sel];
+  if (t.role === 'upgrade') { applyUpgrade(r, c, t); return; }   // applied onto an existing source
+  if (energy < t.cost) { setHint('Not enough energy for ' + t.nm + '.'); return; }
+  if (t.role === 'active') {            // Nuclear Bomb — fires on the target, not placed
+    energy -= t.cost; doNuke(r, c); updateHUD(); refreshPalette(); return;
+  }
+  if (grid[r][c] || floors[r][c]) { setHint('That cell is occupied.'); return; }
+  energy -= t.cost;
+  if (t.role === 'floor') floors[r][c] = { key:sel };
+  else grid[r][c] = { key:sel, hp:t.hp, maxhp:t.hp, r:r, c:c, cd:0, genCd:(t.role === 'gen' ? t.genCd : 0) };
+  updateHUD(); refreshPalette();
+});
+
+// ============================================================
+//  WAVES
+// ============================================================
+document.getElementById('cancel-btn').addEventListener('click', function() { sel = null; refreshPalette(); });
+
+function spawnEnemy(type, lane) {
+  var d = ENEMIES[type];
+  var targetCol = null;
+  if (d.scout) lane = weakestLane();         // Scout marches into your weakest lane
+  if (d.fly) {                                // Thief flies to a random tower to kidnap it
+    var towers = [];
+    for (var rr = 0; rr < ROWS; rr++) for (var cc = 0; cc < COLS; cc++) {
+      var tw = grid[rr][cc];
+      if (tw && TOWERS[tw.key].role !== 'util') towers.push({ r:rr, c:cc });
+    }
+    if (towers.length) { var tg = towers[Math.floor(Math.random() * towers.length)]; lane = tg.r; targetCol = tg.c; }
+  }
+  enemies.push({ id:++eid, type:type, r:lane, x:BW + 10, hp:d.hp, maxhp:d.hp,
+                 speed:d.speed, sabotage:d.sabotage, resist:d.resist, fly:d.fly, targetCol:targetCol });
+}
+function weakestLane() {
+  var best = 0, bestScore = Infinity;
+  for (var r = 0; r < ROWS; r++) {
+    var sc = 0;
+    for (var c = 0; c < COLS; c++) {
+      var tw = grid[r][c];
+      if (tw && TOWERS[tw.key].role === 'fire') { var t = TOWERS[tw.key]; sc += t.dmg / t.fireCd; }
+    }
+    if (sc < bestScore) { bestScore = sc; best = r; }
+  }
+  return best;
+}
+
+// ============================================================
+//  UPDATE
+// ============================================================
+function update(dt) {
+  // passive energy + SMR generation
+  passiveTimer += dt;
+  if (passiveTimer >= 1) { energy += 1; passiveTimer -= 1; }
+  for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+    var tw = grid[r][c]; if (!tw) continue;
+    var def = TOWERS[tw.key], role = def.role;
+    if (role === 'gen') {
+      tw.genCd -= dt;
+      if (tw.genCd <= 0) { energy += def.gen; tw.genCd += def.genCd; }
+    } else if (role === 'fire') {
+      tw.cd -= dt;
+      if (tw.cd <= 0 && enemyAheadOf(tw)) { fire(tw); tw.cd = def.fireCd * (tw.doubled ? 0.5 : 1); }
+    }
+  }
+  // dead (nuked) tiles unlock after a cooldown
+  for (var fr = 0; fr < ROWS; fr++) for (var fc = 0; fc < COLS; fc++) {
+    var fl = floors[fr][fc];
+    if (fl && fl.key === 'dead') { fl.timer -= dt; if (fl.timer <= 0) floors[fr][fc] = null; }
+  }
+  if (nukeFlash) { nukeFlash.t -= dt; if (nukeFlash.t <= 0) nukeFlash = null; }
+
+  if (gs === 'playing') {
+    // spawn
+    if (spawnQueue.length) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) { spawnEnemy(spawnQueue.shift(), Math.floor(Math.random() * ROWS)); spawnTimer = 2.1; }
+    }
+  }
+
+  // projectiles
+  for (var p = projectiles.length - 1; p >= 0; p--) {
+    var pr = projectiles[p];
+    // lane-tile modifiers act on β beams passing through them
+    var pcx = Math.floor(pr.x / CELL), pcy = Math.floor(pr.y / CELL);
+    if (pcx >= 0 && pcx < COLS && pcy >= 0 && pcy < ROWS) {
+      var mf = floors[pcy][pcx];
+      if (mf && pr.type === 'beta') {
+        if (mf.key === 'brems') { pr.type = 'xray'; pr.pierce = true; pr.col = '#b39ddb'; }   // β → piercing X-ray
+        else if (mf.key === 'ecloud') pr.wander = true;                                       // β starts to wander
+      }
+    }
+    if (pr.wander) {                         // Electron Cloud: β takes a tortuous, lane-jumping path
+      pr.vy += (Math.random() - 0.5) * 1100 * dt;
+      if (pr.vy > 220) pr.vy = 220; if (pr.vy < -220) pr.vy = -220;
+    }
+    pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.dist += pr.spd * dt;
+    var dead = pr.dist > pr.range || pr.x < -20 || pr.x > BW + 20 || pr.y < -20 || pr.y > BH + 20;
+    for (var i = 0; i < enemies.length; i++) {
+      var en = enemies[i];
+      if (en.hp <= 0 || pr.hitSet[en.id]) continue;
+      var cy = en.r * CELL + CELL / 2, rr = ENEMIES[en.type].r;
+      var dx = pr.x - en.x, dy = pr.y - cy;
+      if (dx * dx + dy * dy <= rr * rr) {
+        var res = en.resist[pr.type] || 0;
+        en.hp -= pr.dmg * (1 - res);
+        pr.hitSet[en.id] = 1;
+        // mutation gamble — one roll per enemy, on its first hit
+        if (!en.mutChecked && !en.mutated && en.hp > 0 && Math.random() < MUT_CHANCE) mutate(en);
+        en.mutChecked = true;
+        // neutron-induced fission: a fissile killed by a neutron ejects 3 neutrons at random angles
+        if (en.hp <= 0 && pr.type === 'neutron' && ENEMIES[en.type].fissile && !en.fissioned) fission(en);
+        if (!pr.pierce) { dead = true; break; }
+      }
+    }
+    if (dead) projectiles.splice(p, 1);
+  }
+
+  // enemies
+  for (var e = enemies.length - 1; e >= 0; e--) {
+    var en2 = enemies[e];
+    if (en2.hp <= 0) { enemies.splice(e, 1); continue; }
+    // Thief: flies over everything to its target tower and kidnaps it (unless guarded)
+    if (en2.fly) {
+      en2.x -= en2.speed * dt;
+      if (en2.targetCol != null && en2.x <= en2.targetCol * CELL + CELL / 2) {
+        if (grid[en2.r][en2.targetCol]) {
+          if (isGuarded(en2.r, en2.targetCol)) setHint('Security repelled a thief!');
+          else { grid[en2.r][en2.targetCol] = null; setHint('A thief stole one of your towers!'); }
+        }
+        enemies.splice(e, 1); continue;
+      }
+      if (en2.x + ENEMIES[en2.type].r < 0) { enemies.splice(e, 1); continue; }   // no target → just leaves
+      continue;
+    }
+    var frontCol = Math.floor((en2.x) / CELL);
+    if (frontCol >= 0 && frontCol < COLS && grid[en2.r][frontCol]) {
+      // attack the tower in this cell
+      var target = grid[en2.r][frontCol];
+      target.hp -= en2.sabotage * dt;
+      if (target.hp <= 0) grid[en2.r][frontCol] = null;
+    } else {
+      var spd = en2.speed;
+      if (frontCol >= 0 && frontCol < COLS && floors[en2.r][frontCol] && floors[en2.r][frontCol].key === 'trench') spd *= 0.4;
+      en2.x -= spd * dt;
+      if (en2.x + ENEMIES[en2.type].r < 0) {   // breached the left edge
+        enemies.splice(e, 1);
+        lives--;
+        setHint('An enemy breached! Lives: ' + lives);
+        if (lives <= 0) { gs = 'lost'; showEnd(false); return; }
+      }
+    }
+  }
+
+  // all enemies cleared = victory
+  if (gs === 'playing' && spawnQueue.length === 0 && enemies.length === 0) { gs = 'won'; showEnd(true); return; }
+
+  updateHUD();
+}
+
+function enemyAheadOf(tw) {
+  var tx = tw.c * CELL + CELL / 2, range = TOWERS[tw.key].range;
+  for (var i = 0; i < enemies.length; i++) {
+    var en = enemies[i];
+    if (en.r === tw.r && en.x > tx && (en.x - tx) <= range) return true;
+  }
+  return false;
+}
+function fire(tw) {
+  var t = TOWERS[tw.key];
+  var cx = tw.c * CELL + CELL / 2, cy = tw.r * CELL + CELL / 2, spd = 300;
+  var angles = t.angles || [0];                 // CT fires a fan; everything else straight
+  for (var a = 0; a < angles.length; a++) {
+    projectiles.push({ type:t.ptype || tw.key, x:cx, y:cy,
+      vx:Math.cos(angles[a]) * spd, vy:Math.sin(angles[a]) * spd, spd:spd,
+      dmg:t.dmg, range:t.range, dist:0, pierce:t.pierce, col:t.proj, hitSet:{} });
+  }
+}
+function fission(en) {
+  en.fissioned = true;
+  var cy = en.r * CELL + CELL / 2;
+  for (var k = 0; k < 3; k++) {                 // 3 neutrons, isotropic random angles
+    var ang = Math.random() * Math.PI * 2;
+    projectiles.push({ type:'neutron', x:en.x, y:cy,
+      vx:Math.cos(ang) * FISSION_SPD, vy:Math.sin(ang) * FISSION_SPD, spd:FISSION_SPD,
+      dmg:FISSION_DMG, range:BW * 0.7, dist:0, pierce:false, col:'#e1bee7', hitSet:{}, fission:true });
+  }
+}
+function mutate(en) {
+  en.mutated = true; en.mutChecked = true;
+  en.hp = en.hp * 2 + 60; en.maxhp = en.maxhp * 2 + 60;
+  en.speed *= 2; en.sabotage *= 2;
+  setHint('A Rad-Mutant formed! It is faster, tougher, and hits harder.');
+}
+function doNuke(r, c) {
+  var r2 = Math.min(r + 1, ROWS - 1), c2 = Math.min(c + 1, COLS - 1);
+  for (var e = enemies.length - 1; e >= 0; e--) {
+    var en = enemies[e], ec = Math.floor(en.x / CELL);
+    if (en.r >= r && en.r <= r2 && ec >= c && ec <= c2) enemies.splice(e, 1);
+  }
+  for (var rr = r; rr <= r2; rr++) for (var cc = c; cc <= c2; cc++) { grid[rr][cc] = null; floors[rr][cc] = { key:'dead', timer:12 }; }
+  nukeFlash = { r:r, c:c, r2:r2, c2:c2, t:0.5 };
+  setHint('Nuclear strike! Those tiles are sealed off for a while.');
+}
+function isGuarded(r, c) {
+  for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+    var rr = r + dr, cc = c + dc;
+    if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS) { var tw = grid[rr][cc]; if (tw && tw.key === 'security') return true; }
+  }
+  return false;
+}
+function applyUpgrade(r, c, t) {
+  var tw = grid[r][c];
+  if (!tw || TOWERS[tw.key].role !== 'fire') { setHint('Apply upgrades onto a radiation source.'); return; }
+  if (t.target === 'beta' && tw.key !== 'beta') { setHint('That upgrade only fits a Beta source.'); return; }
+  var flag = (sel === 'doubler') ? 'doubled' : (sel === 'ecloud') ? 'electronCloud' : 'brems';
+  if (tw[flag]) { setHint('That source already has this upgrade.'); return; }
+  if (energy < t.cost) { setHint('Not enough energy for ' + t.nm + '.'); return; }
+  energy -= t.cost;
+  tw[flag] = true;
+  setHint(t.nm + ' applied to ' + TOWERS[tw.key].nm + '.');
+  updateHUD(); refreshPalette();
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function draw() {
+  ctx.clearRect(0, 0, BW, BH);
+  // lanes
+  for (var r = 0; r < ROWS; r++) {
+    ctx.fillStyle = (r % 2 === 0) ? '#11161f' : '#0e131b';
+    ctx.fillRect(0, r * CELL, BW, CELL);
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+  for (var c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(c*CELL,0); ctx.lineTo(c*CELL,BH); ctx.stroke(); }
+  for (var rr = 0; rr <= ROWS; rr++) { ctx.beginPath(); ctx.moveTo(0,rr*CELL); ctx.lineTo(BW,rr*CELL); ctx.stroke(); }
+
+  drawFloors();
+
+  // placement ghost
+  if (sel && mouseCell && !grid[mouseCell.r][mouseCell.c]) {
+    var ok = energy >= TOWERS[sel].cost;
+    ctx.fillStyle = ok ? 'rgba(67,160,71,0.25)' : 'rgba(229,57,53,0.2)';
+    ctx.fillRect(mouseCell.c*CELL, mouseCell.r*CELL, CELL, CELL);
+  }
+
+  // towers
+  for (var tr = 0; tr < ROWS; tr++) for (var tc = 0; tc < COLS; tc++) {
+    var tw = grid[tr][tc]; if (!tw) continue;
+    drawTower(tw);
+  }
+  // projectiles
+  for (var p = 0; p < projectiles.length; p++) {
+    var pr = projectiles[p];
+    ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.pierce ? 5 : 6, 0, 7); ctx.fillStyle = pr.col;
+    ctx.shadowColor = pr.col; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+  }
+  // enemies
+  for (var e = 0; e < enemies.length; e++) drawEnemy(enemies[e]);
+  // nuke flash
+  if (nukeFlash) {
+    var nx = nukeFlash.c * CELL, ny = nukeFlash.r * CELL;
+    var nw = (nukeFlash.c2 - nukeFlash.c + 1) * CELL, nh = (nukeFlash.r2 - nukeFlash.r + 1) * CELL;
+    ctx.fillStyle = 'rgba(255,221,128,' + (nukeFlash.t / 0.5 * 0.75).toFixed(2) + ')';
+    ctx.fillRect(nx, ny, nw, nh);
+  }
+}
+
+function drawTower(tw) {
+  var x = tw.c * CELL, y = tw.r * CELL, t = TOWERS[tw.key];
+  if (spriteReady('tower_' + tw.key)) {
+    ctx.drawImage(SPRITES['tower_' + tw.key], x + 4, y + 4, CELL - 8, CELL - 8);
+  } else {
+    roundRect(x + 8, y + 8, CELL - 16, CELL - 16, 9);
+    ctx.fillStyle = '#1b2230'; ctx.fill();
+    ctx.strokeStyle = t.col; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.fillStyle = t.col; ctx.font = 'bold 26px Arial';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(t.ic, x + CELL/2, y + CELL/2 + 1);
+  }
+  // hp bar
+  if (tw.hp < tw.maxhp) {
+    ctx.fillStyle = '#000'; ctx.fillRect(x + 10, y + CELL - 12, CELL - 20, 4);
+    ctx.fillStyle = '#66bb6a'; ctx.fillRect(x + 10, y + CELL - 12, (CELL - 20) * (tw.hp / tw.maxhp), 4);
+  }
+  // Activity Doubler mark
+  if (tw.doubled) { ctx.font = '10px Arial'; ctx.fillStyle = '#ffd54f'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('⏫', x + 4, y + 3); }
+}
+
+function drawFloors() {
+  for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+    var f = floors[r][c]; if (!f) continue;
+    var x = c * CELL, y = r * CELL;
+    if (f.key === 'dead') {     // nuked / sealed tile
+      ctx.fillStyle = 'rgba(40,18,18,0.85)'; ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.strokeStyle = '#a33'; ctx.lineWidth = 1.5; ctx.strokeRect(x + 3, y + 3, CELL - 6, CELL - 6);
+      ctx.fillStyle = '#ff8a80'; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('☢ ' + Math.ceil(f.timer) + 's', x + CELL / 2, y + CELL / 2);
+      continue;
+    }
+    if (spriteReady('tile_' + f.key)) { ctx.drawImage(SPRITES['tile_' + f.key], x + 2, y + 2, CELL - 4, CELL - 4); continue; }
+    var cx = x + CELL / 2, cy = y + CELL / 2;
+    if (f.key === 'ecloud') {                 // electron cloud — scattered teal blobs
+      for (var b = 0; b < 7; b++) {
+        var bx = x + 12 + (b * 37 % (CELL - 22)), by = y + 12 + (b * 23 % (CELL - 22));
+        ctx.beginPath(); ctx.arc(bx, by, 6, 0, 7); ctx.fillStyle = 'rgba(128,203,196,0.35)'; ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(128,203,196,0.9)'; ctx.font = '11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('e⁻', cx, cy);
+    } else if (f.key === 'brems') {           // bremsstrahlung target — concentric rings
+      for (var ring = 3; ring >= 1; ring--) {
+        ctx.beginPath(); ctx.arc(cx, cy, ring * 9, 0, 7);
+        ctx.strokeStyle = 'rgba(179,157,219,' + (0.3 + ring * 0.12) + ')'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 7); ctx.fillStyle = '#b39ddb'; ctx.fill();
+    } else {                                   // trench — diagonal hatch
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x + 3, y + 3, CELL - 6, CELL - 6); ctx.clip();
+      ctx.fillStyle = 'rgba(141,110,99,0.22)'; ctx.fillRect(x + 3, y + 3, CELL - 6, CELL - 6);
+      ctx.strokeStyle = 'rgba(141,110,99,0.55)'; ctx.lineWidth = 1;
+      for (var i = -CELL; i < CELL; i += 8) { ctx.beginPath(); ctx.moveTo(x + i, y + CELL); ctx.lineTo(x + i + CELL, y); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+}
+
+function drawEnemy(en) {
+  var d = ENEMIES[en.type], y = en.r * CELL + CELL / 2;
+  if (en.mutated) { ctx.save(); ctx.shadowColor = '#76ff03'; ctx.shadowBlur = 16; }
+  var sprKey = (en.mutated && spriteReady('enemy_mutant')) ? 'enemy_mutant' : d.spr;
+  if (spriteReady(sprKey)) {
+    ctx.drawImage(SPRITES[sprKey], en.x - CELL/2 + 6, en.r*CELL + 6, CELL - 12, CELL - 12);
+  } else {
+    var rad = d.r * (en.mutated ? 1.15 : 1);
+    ctx.beginPath(); ctx.arc(en.x, y, rad, 0, 7); ctx.fillStyle = en.mutated ? '#7cb342' : d.col; ctx.fill();
+    ctx.strokeStyle = en.mutated ? '#76ff03' : (en.type === 'heavy' ? '#90a4ae' : '#bcaaa4');
+    ctx.lineWidth = (en.type === 'heavy' || en.mutated) ? 4 : 2; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(en.mutated ? '☢' : (d.ic || '☣'), en.x, y + 1);
+  }
+  if (en.mutated) ctx.restore();
+  // hp bar
+  ctx.fillStyle = '#000'; ctx.fillRect(en.x - d.r, en.r*CELL + 4, d.r*2, 4);
+  ctx.fillStyle = '#ef5350'; ctx.fillRect(en.x - d.r, en.r*CELL + 4, d.r*2 * Math.max(0,en.hp/en.maxhp), 4);
+}
+
+function roundRect(x, y, w, h, rad) {
+  ctx.beginPath();
+  ctx.moveTo(x+rad,y); ctx.arcTo(x+w,y,x+w,y+h,rad); ctx.arcTo(x+w,y+h,x,y+h,rad);
+  ctx.arcTo(x,y+h,x,y,rad); ctx.arcTo(x,y,x+w,y,rad); ctx.closePath();
+}
+
+// ============================================================
+//  HUD / FLOW
+// ============================================================
+function updateHUD() {
+  document.getElementById('hp-energy').textContent = Math.floor(energy);
+  document.getElementById('hp-lives').textContent = lives;
+  refreshPalette();
+}
+function setHint(t) { document.getElementById('hint').textContent = t; }
+function showEnd(won) {
+  document.getElementById('end-title').textContent = won ? 'Area Secured!' : 'Defenses Overrun';
+  document.getElementById('end-title').style.color = won ? '#69f0ae' : '#ff8a80';
+  document.getElementById('end-msg').textContent = won
+    ? 'You held every wave. Matching the radiation to the threat — gamma for the shielded heavies — is the key.'
+    : 'The horde broke through. Mix your sources: alpha for burst, gamma to pierce armor and swarms.';
+  document.getElementById('end').classList.add('show');
+}
+
+// ============================================================
+//  LOOP
+// ============================================================
+var last = 0;
+function loop(ts) {
+  var dt = last ? Math.min((ts - last) / 1000, 0.05) : 0;
+  last = ts;
+  if (gs === 'playing') update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('intro-btn').addEventListener('click', function() {
+  document.getElementById('intro').classList.remove('show');
+  startGame();
+});
+document.getElementById('end-btn').addEventListener('click', startGame);
+
+resetState();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
