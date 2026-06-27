@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Radioactive Equilibrium — Parent-Daughter Activity</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Arial, sans-serif;
+  background: #f5f7fa;
+  color: #222;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+#app-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 10px 14px;
+  gap: 10px;
+}
+#top-area {
+  display: flex;
+  gap: 12px;
+}
+#left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+canvas {
+  display: block;
+  background: #fff;
+  border: 2px solid #cfd8dc;
+  border-radius: 4px;
+  width: 650px;
+  height: 380px;
+  flex-shrink: 0;
+}
+#controls-panel {
+  width: 235px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ctrl-box {
+  background: #fff;
+  border: 1px solid #cfd8dc;
+  border-radius: 6px;
+  padding: 10px;
+}
+.ctrl-box h3 {
+  font-size: 12px;
+  color: #5d4037;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #efebe9;
+  padding-bottom: 5px;
+}
+label {
+  font-size: 12px;
+  color: #555;
+  display: block;
+  margin-bottom: 3px;
+}
+input[type="range"] {
+  width: 100%;
+  margin-bottom: 3px;
+  accent-color: #5d4037;
+}
+.val-display {
+  font-size: 11px;
+  font-weight: bold;
+  color: #5d4037;
+  text-align: right;
+  margin-bottom: 4px;
+}
+.preset-btn {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 5px;
+  border: 1px solid #bcaaa4;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  background: #efebe9;
+  color: #4e342e;
+  text-align: left;
+}
+.preset-btn:hover { background: #d7ccc8; }
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 4px;
+}
+input[type="checkbox"] { margin-right: 5px; accent-color: #5d4037; }
+#equil-box {
+  background: #fff;
+  border: 1px solid #cfd8dc;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+#equil-box h3 {
+  font-size: 12px;
+  color: #5d4037;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+}
+#equil-type {
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 6px;
+}
+.secular  { color: #2e7d32; }
+.transient { color: #e65100; }
+.none-eq  { color: #b71c1c; }
+#equil-desc {
+  font-size: 12px;
+  color: #555;
+  line-height: 1.6;
+}
+#ratio-display {
+  font-size: 11px;
+  background: #efebe9;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-top: 8px;
+  line-height: 1.7;
+}
+#ratio-display span { font-weight: bold; color: #5d4037; }
+</style>
+</head>
+<body>
+<div id="app-wrapper">
+  <div id="top-area">
+    <div id="left-col">
+      <canvas id="plotCanvas" width="650" height="380"></canvas>
+      <div id="equil-box">
+        <h3>Equilibrium Classification</h3>
+        <div id="equil-type">—</div>
+        <div id="equil-desc">—</div>
+        <div id="ratio-display">—</div>
+      </div>
+    </div>
+    <div id="controls-panel">
+
+      <div class="ctrl-box">
+        <h3>Presets</h3>
+        <button class="preset-btn" onclick="applyPreset('mo99')">Mo-99 / Tc-99m<br><span style="color:#888;font-size:10px;">T½: 66h / 6h — Transient</span></button>
+        <button class="preset-btn" onclick="applyPreset('ra226')">Ra-226 / Rn-222<br><span style="color:#888;font-size:10px;">T½: 1600y / 3.8d — Secular</span></button>
+        <button class="preset-btn" onclick="applyPreset('i132')">I-132 / Te-132<br><span style="color:#888;font-size:10px;">T½: 2.3h / 78h — No Equil.</span></button>
+      </div>
+
+      <div class="ctrl-box">
+        <h3>Parent Half-Life</h3>
+        <label>T½ parent (log scale):</label>
+        <input type="range" id="parentSlider" min="-1" max="3" step="0.02" value="0.82" oninput="onSliderChange()">
+        <div class="val-display" id="parentVal">—</div>
+      </div>
+
+      <div class="ctrl-box">
+        <h3>Daughter Half-Life</h3>
+        <label>T½ daughter (log scale):</label>
+        <input type="range" id="daughterSlider" min="-2" max="2.7" step="0.02" value="0.08" oninput="onSliderChange()">
+        <div class="val-display" id="daughterVal">—</div>
+      </div>
+
+      <div class="ctrl-box">
+        <h3>Display Options</h3>
+        <div class="checkbox-row">
+          <input type="checkbox" id="chkLogY" onchange="redraw()">
+          Logarithmic Y axis
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="chkEqLine" checked onchange="redraw()">
+          Show equilibrium marker
+        </div>
+      </div>
+
+      <div class="ctrl-box">
+        <h3>Initial Activity</h3>
+        <div style="font-size:12px;color:#555;">A₀ (parent) = <b style="color:#5d4037;">1000 MBq</b></div>
+        <div style="font-size:11px;color:#999;margin-top:4px;">Daughter starts at 0 MBq</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- CTRP-THEME-START -->
+<style>
+  :root { --ctrp-green:#166534; --ctrp-light:#dcfce7; --ctrp-muted:#4b5563; --ctrp-bg:#f0fdf4; }
+  .ctrp-header { display:flex; align-items:center; gap:12px; background:#fff; border-bottom:3px solid var(--ctrp-green); padding:10px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+  .ctrp-header h1.ctrp-title { margin:0; font-size:18px; font-weight:700; color:var(--ctrp-green); }
+  .ctrp-header .ctrp-subtitle { color:var(--ctrp-muted); font-size:12px; margin-top:2px; }
+  .ctrp-footer { background:var(--ctrp-bg); border-top:2px solid var(--ctrp-light); color:var(--ctrp-muted); font-size:11px; text-align:center; padding:8px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+</style>
+<script>
+(function () {
+  var TITLE = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML = '<div class="ctrp-title-block"><h1 class="ctrp-title">' + TITLE + '</h1>' + (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') + '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML = "&copy; " + new Date().getFullYear() + " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", apply); } else { apply(); }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+
+<script>
+// ============================================================
+// RADIOACTIVE EQUILIBRIUM EXPERIMENT
+// ============================================================
+
+var canvas, ctx;
+var A0 = 1000; // MBq initial parent activity
+
+var PLOT_X = 65, PLOT_Y = 20, PLOT_W = 555, PLOT_H = 310;
+var N_POINTS = 500;
+
+// ---- Physics ----
+
+function parentActivity(t, A0p, lp) {
+  return A0p * Math.exp(-lp * t);
+}
+
+function daughterActivity(t, A0p, lp, ld) {
+  if (Math.abs(ld - lp) < 1e-15) {
+    return A0p * lp * t * Math.exp(-lp * t);
+  }
+  return A0p * (ld / (ld - lp)) * (Math.exp(-lp * t) - Math.exp(-ld * t));
+}
+
+function formatHalfLife(days) {
+  if (days < 1 / 24) {
+    return (days * 24 * 60).toFixed(1) + ' min';
+  }
+  if (days < 2) {
+    return (days * 24).toFixed(2) + ' h';
+  }
+  if (days < 365) {
+    return days.toFixed(2) + ' d';
+  }
+  return (days / 365.25).toFixed(2) + ' y';
+}
+
+function getHalfLifeDays(sliderVal) {
+  // log10 slider: -1 = 0.1d, 3 = 1000d
+  return Math.pow(10, parseFloat(sliderVal));
+}
+
+function getTimeAxisMax(T_parent_days) {
+  // Show 5 parent half-lives
+  return T_parent_days * 5;
+}
+
+function formatTimeLabel(days) {
+  if (days < 2 / 24) {
+    return (days * 24 * 60).toFixed(0) + 'm';
+  }
+  if (days < 3) {
+    return (days * 24).toFixed(1) + 'h';
+  }
+  if (days < 400) {
+    return days.toFixed(1) + 'd';
+  }
+  return (days / 365.25).toFixed(1) + 'y';
+}
+
+function getEquilibriumType(Tp, Td) {
+  if (Tp > 10 * Td) return 'secular';
+  if (Tp > Td) return 'transient';
+  return 'none';
+}
+
+// Find time when daughter activity is maximum (d/dt A_d = 0)
+// d/dt A_d = 0 => t_max = ln(ld/lp) / (ld - lp)
+function tMaxDaughter(lp, ld) {
+  if (Math.abs(ld - lp) < 1e-15) return 1 / lp;
+  if (ld <= lp) return null; // no maximum for no-equilibrium case if parent longer
+  var t = Math.log(ld / lp) / (ld - lp);
+  return t > 0 ? t : null;
+}
+
+// ---- Coordinate transforms ----
+
+function timeToX(t, tMax) { return PLOT_X + (t / tMax) * PLOT_W; }
+function actToY(A, Amax, logY) {
+  if (logY) {
+    var logMax = Math.log10(Amax);
+    var logMin = logMax - 4;
+    if (A <= 0) return PLOT_Y + PLOT_H;
+    var logA = Math.log10(A);
+    if (logA < logMin) return PLOT_Y + PLOT_H;
+    return PLOT_Y + PLOT_H - ((logA - logMin) / (logMax - logMin)) * PLOT_H;
+  } else {
+    return PLOT_Y + PLOT_H - (A / Amax) * PLOT_H;
+  }
+}
+
+// ---- Drawing ----
+
+function drawGrid(tMax, Amax, logY) {
+  ctx.strokeStyle = '#e8e8e8';
+  ctx.lineWidth = 0.8;
+  // Vertical: 6 divisions
+  for (var i = 0; i <= 6; i++) {
+    var t = tMax * i / 6;
+    var x = timeToX(t, tMax);
+    ctx.beginPath();
+    ctx.moveTo(x, PLOT_Y);
+    ctx.lineTo(x, PLOT_Y + PLOT_H);
+    ctx.stroke();
+  }
+  // Horizontal
+  if (logY) {
+    var logMax = Math.log10(Amax);
+    for (var e = Math.floor(logMax) - 4; e <= Math.ceil(logMax); e++) {
+      var y = actToY(Math.pow(10, e), Amax, true);
+      if (y < PLOT_Y || y > PLOT_Y + PLOT_H) continue;
+      ctx.beginPath();
+      ctx.moveTo(PLOT_X, y);
+      ctx.lineTo(PLOT_X + PLOT_W, y);
+      ctx.stroke();
+    }
+  } else {
+    for (var p = 0; p <= 5; p++) {
+      var A = Amax * p / 5;
+      var y2 = actToY(A, Amax, false);
+      ctx.beginPath();
+      ctx.moveTo(PLOT_X, y2);
+      ctx.lineTo(PLOT_X + PLOT_W, y2);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawAxes(tMax, Amax, logY, T_parent_days) {
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(PLOT_X, PLOT_Y + PLOT_H);
+  ctx.lineTo(PLOT_X + PLOT_W, PLOT_Y + PLOT_H);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(PLOT_X, PLOT_Y);
+  ctx.lineTo(PLOT_X, PLOT_Y + PLOT_H);
+  ctx.stroke();
+
+  // X labels
+  ctx.fillStyle = '#444';
+  ctx.font = '10px Arial';
+  ctx.textAlign = 'center';
+  for (var i = 0; i <= 6; i++) {
+    var t = tMax * i / 6;
+    ctx.fillText(formatTimeLabel(t), timeToX(t, tMax), PLOT_Y + PLOT_H + 14);
+  }
+  ctx.font = 'bold 11px Arial';
+  ctx.fillStyle = '#333';
+  ctx.fillText('Time', PLOT_X + PLOT_W / 2, PLOT_Y + PLOT_H + 28);
+
+  // Y labels
+  ctx.textAlign = 'right';
+  ctx.font = '10px Arial';
+  ctx.fillStyle = '#444';
+  if (logY) {
+    var logMax = Math.log10(Amax);
+    for (var e2 = Math.floor(logMax) - 4; e2 <= Math.ceil(logMax); e2++) {
+      var y = actToY(Math.pow(10, e2), Amax, true);
+      if (y < PLOT_Y || y > PLOT_Y + PLOT_H) continue;
+      var lbl = Math.pow(10, e2);
+      ctx.fillText(lbl < 1 ? lbl.toFixed(3) : (lbl < 1000 ? lbl.toFixed(0) : lbl.toExponential(0)), PLOT_X - 5, y + 4);
+    }
+  } else {
+    for (var p2 = 0; p2 <= 5; p2++) {
+      var A2 = Amax * p2 / 5;
+      ctx.fillText(A2.toFixed(0), PLOT_X - 5, actToY(A2, Amax, false) + 4);
+    }
+  }
+
+  // Y axis title
+  ctx.save();
+  ctx.translate(12, PLOT_Y + PLOT_H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 11px Arial';
+  ctx.fillStyle = '#333';
+  ctx.fillText('Activity (MBq)', 0, 0);
+  ctx.restore();
+}
+
+function drawCurve(times, values, color, dashed, tMax, Amax, logY) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash(dashed ? [7, 4] : []);
+  ctx.beginPath();
+  var started = false;
+  for (var i = 0; i < times.length; i++) {
+    var x = timeToX(times[i], tMax);
+    var y = actToY(values[i], Amax, logY);
+    if (y < PLOT_Y) {
+      started = false;
+      continue;
+    }
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawEquilLine(tEq, tMax, Amax, logY) {
+  if (tEq === null || tEq <= 0 || tEq >= tMax) return;
+  var x = timeToX(tEq, tMax);
+  ctx.strokeStyle = '#9c27b0';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x, PLOT_Y);
+  ctx.lineTo(x, PLOT_Y + PLOT_H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#9c27b0';
+  ctx.font = '9px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('t_eq', x, PLOT_Y + PLOT_H + 25);
+}
+
+function drawLegend() {
+  var lx = PLOT_X + PLOT_W - 180, ly = PLOT_Y + 8;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(lx - 4, ly - 4, 178, 60);
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(lx - 4, ly - 4, 178, 60);
+
+  var items = [
+    {color: '#1e88e5', label: 'Parent',       dashed: false},
+    {color: '#fb8c00', label: 'Daughter',     dashed: false},
+    {color: '#78909c', label: 'Total',        dashed: true}
+  ];
+  for (var i = 0; i < items.length; i++) {
+    ctx.strokeStyle = items[i].color;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash(items[i].dashed ? [6, 3] : []);
+    ctx.beginPath();
+    ctx.moveTo(lx, ly + i * 17 + 5);
+    ctx.lineTo(lx + 22, ly + i * 17 + 5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#333';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(items[i].label, lx + 26, ly + i * 17 + 9);
+  }
+}
+
+function redraw() {
+  var Tp_days = getHalfLifeDays(document.getElementById('parentSlider').value);
+  var Td_days = getHalfLifeDays(document.getElementById('daughterSlider').value);
+  var logY = document.getElementById('chkLogY').checked;
+  var showEqLine = document.getElementById('chkEqLine').checked;
+
+  var lp = Math.log(2) / Tp_days;
+  var ld = Math.log(2) / Td_days;
+  var tMax = getTimeAxisMax(Tp_days);
+
+  // Build time array
+  var times = [];
+  for (var i = 0; i <= N_POINTS; i++) {
+    times.push(tMax * i / N_POINTS);
+  }
+
+  var parentVals = [], daughterVals = [], totalVals = [];
+  var peakDaughter = 0;
+  for (var j = 0; j < times.length; j++) {
+    var ap = parentActivity(times[j], A0, lp);
+    var ad = daughterActivity(times[j], A0, lp, ld);
+    if (ad < 0) ad = 0;
+    parentVals.push(ap);
+    daughterVals.push(ad);
+    totalVals.push(ap + ad);
+    if (ad > peakDaughter) peakDaughter = ad;
+  }
+
+  var peakTotal = 0;
+  for (var k = 0; k < totalVals.length; k++) {
+    if (totalVals[k] > peakTotal) peakTotal = totalVals[k];
+  }
+  var Amax = logY ? A0 * 1.5 : peakTotal * 1.1;
+
+  // Clear
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawGrid(tMax, Amax, logY);
+  drawAxes(tMax, Amax, logY, Tp_days);
+
+  var tEq = tMaxDaughter(lp, ld);
+  if (showEqLine) drawEquilLine(tEq, tMax, Amax, logY);
+
+  // Draw total (dashed gray)
+  drawCurve(times, totalVals, '#78909c', true, tMax, Amax, logY);
+  // Draw daughter (orange)
+  drawCurve(times, daughterVals, '#fb8c00', false, tMax, Amax, logY);
+  // Draw parent (blue)
+  drawCurve(times, parentVals, '#1e88e5', false, tMax, Amax, logY);
+
+  drawLegend();
+
+  // Update equilibrium classification
+  updateClassification(Tp_days, Td_days, lp, ld, peakDaughter, tEq);
+}
+
+function updateClassification(Tp, Td, lp, ld, peakD, tEq) {
+  var type = getEquilibriumType(Tp, Td);
+  var typeEl = document.getElementById('equil-type');
+  var descEl = document.getElementById('equil-desc');
+  var ratioEl = document.getElementById('ratio-display');
+
+  if (type === 'secular') {
+    typeEl.className = 'secular';
+    typeEl.textContent = 'SECULAR EQUILIBRIUM';
+    descEl.textContent = 'Daughter activity approaches and equals parent activity. A_daughter ≈ A_parent at equilibrium. This is the principle behind the radioisotope generator (e.g. Mo-99/Tc-99m).';
+  } else if (type === 'transient') {
+    typeEl.className = 'transient';
+    typeEl.textContent = 'TRANSIENT EQUILIBRIUM';
+    descEl.textContent = 'Daughter activity exceeds parent briefly, then both decay with the parent\'s half-life. At equilibrium: A_daughter / A_parent = λ_d / (λ_d − λ_p).';
+  } else {
+    typeEl.className = 'none-eq';
+    typeEl.textContent = 'NO EQUILIBRIUM';
+    descEl.textContent = 'Daughter has a longer half-life than the parent. The daughter builds up and then decays independently. The parent is exhausted before the daughter can reach equilibrium.';
+  }
+
+  var theorRatio = (Math.abs(ld - lp) > 1e-15) ? (ld / (ld - lp)) : Infinity;
+  var tEqStr = (tEq !== null && tEq > 0) ? formatHalfLife(tEq) : 'N/A';
+  var html = 'T½ parent: <span>' + formatHalfLife(Tp) + '</span><br>';
+  html += 'T½ daughter: <span>' + formatHalfLife(Td) + '</span><br>';
+  html += 'Ratio T_p/T_d: <span>' + (Tp / Td).toFixed(2) + '</span><br>';
+  html += 'Peak daughter: <span>' + peakD.toFixed(1) + ' MBq</span><br>';
+  html += 'Time to peak: <span>' + tEqStr + '</span>';
+  if (type === 'transient') {
+    html += '<br>Equil. ratio: <span>' + (isFinite(theorRatio) ? theorRatio.toFixed(3) : '∞') + '</span>';
+  }
+  ratioEl.innerHTML = html;
+}
+
+function onSliderChange() {
+  var Tp = getHalfLifeDays(document.getElementById('parentSlider').value);
+  var Td = getHalfLifeDays(document.getElementById('daughterSlider').value);
+  document.getElementById('parentVal').textContent = formatHalfLife(Tp);
+  document.getElementById('daughterVal').textContent = formatHalfLife(Td);
+  redraw();
+}
+
+function applyPreset(name) {
+  // Mo-99 / Tc-99m: Tp=66h=2.75d, Td=6h=0.25d
+  // Ra-226 / Rn-222: Tp=1600y=584400d, Td=3.82d
+  // I-132 / Te-132: Tp=2.3h=0.0958d, Td=78h=3.25d
+  var settings = {
+    'mo99':  {parent: Math.log10(2.75),     daughter: Math.log10(0.25)},
+    'ra226': {parent: Math.log10(584400),   daughter: Math.log10(3.82)},
+    'i132':  {parent: Math.log10(0.0958),   daughter: Math.log10(3.25)}
+  };
+  var s = settings[name];
+  if (!s) return;
+  document.getElementById('parentSlider').value = s.parent.toFixed(4);
+  document.getElementById('daughterSlider').value = s.daughter.toFixed(4);
+  onSliderChange();
+}
+
+window.onload = function() {
+  canvas = document.getElementById('plotCanvas');
+  ctx = canvas.getContext('2d');
+  // Set initial display values
+  var Tp = getHalfLifeDays(document.getElementById('parentSlider').value);
+  var Td = getHalfLifeDays(document.getElementById('daughterSlider').value);
+  document.getElementById('parentVal').textContent = formatHalfLife(Tp);
+  document.getElementById('daughterVal').textContent = formatHalfLife(Td);
+  redraw();
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compton Roulette — Photon Interaction Betting Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f5f7fa;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+#game-wrap {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px 12px 8px 12px;
+  gap: 20px;
+}
+#canvas-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+canvas#wheel {
+  display: block;
+  border-radius: 50%;
+  filter: drop-shadow(0 4px 16px rgba(0,0,0,0.22));
+}
+#prob-display {
+  background: #1a237e;
+  color: #fff;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-align: center;
+  min-width: 420px;
+}
+#prob-display span { margin: 0 8px; }
+#hint-box {
+  background: #fff9c4;
+  border: 1px solid #f9a825;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  min-width: 420px;
+}
+#result-banner {
+  min-width: 420px;
+  padding: 12px 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  color: #333;
+  transition: background 0.3s;
+}
+.banner-win  { background: #e8f5e9; color: #2e7d32; }
+.banner-lose { background: #ffebee; color: #c62828; }
+.banner-idle { background: #f5f5f5; color: #555; }
+
+/* Right panel */
+#right-panel {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+}
+.panel-box h3 {
+  color: #1a237e;
+  font-size: 14px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+/* Chips display */
+#chips-display {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a237e;
+  text-align: center;
+}
+#chips-label {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  margin-top: 2px;
+}
+/* Sliders */
+.slider-row {
+  margin-bottom: 10px;
+}
+.slider-row label {
+  font-size: 12px;
+  color: #333;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 3px;
+}
+.slider-row input[type=range] {
+  width: 100%;
+  accent-color: #1a237e;
+}
+.slider-val {
+  font-size: 12px;
+  color: #1a237e;
+  font-weight: 700;
+  text-align: right;
+}
+/* Bet buttons */
+.bet-btn {
+  width: 100%;
+  padding: 9px 6px;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  background: #fff;
+  color: #333;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 6px;
+  transition: all 0.15s;
+}
+.bet-btn:hover { opacity: 0.85; }
+.bet-btn.active { transform: scale(1.03); }
+.bet-btn-pe  { border-color: #c62828; color: #c62828; }
+.bet-btn-pe.selected  { background: #c62828; color: #fff; }
+.bet-btn-c   { border-color: #1565c0; color: #1565c0; }
+.bet-btn-c.selected   { background: #1565c0; color: #fff; }
+.bet-btn-pp  { border-color: #2e7d32; color: #2e7d32; }
+.bet-btn-pp.selected  { background: #2e7d32; color: #fff; }
+.bet-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Spin button */
+#spin-btn {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #1a237e, #283593);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+}
+#spin-btn:hover { background: linear-gradient(135deg, #283593, #3949ab); }
+#spin-btn:disabled { background: #9e9e9e; cursor: not-allowed; box-shadow: none; }
+
+/* Education box */
+#edu-box {
+  font-size: 11px;
+  color: #444;
+  line-height: 1.55;
+  min-height: 50px;
+}
+#edu-box b { color: #1a237e; }
+
+/* Legend */
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+.legend-dot {
+  width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+}
+
+/* Overlay */
+#overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+#overlay-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 32px 40px;
+  text-align: center;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+#overlay-box h2 { color: #1a237e; font-size: 26px; margin-bottom: 10px; }
+#overlay-box p { color: #555; margin-bottom: 20px; font-size: 14px; line-height: 1.5; }
+#overlay-box button {
+  padding: 12px 28px;
+  background: #1a237e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#overlay-box button:hover { background: #283593; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="game-wrap">
+  <div id="canvas-col">
+    <canvas id="wheel" width="420" height="420"></canvas>
+    <div id="prob-display">
+      PE: <span id="prob-pe">—</span> &nbsp;|&nbsp;
+      Compton: <span id="prob-c">—</span> &nbsp;|&nbsp;
+      PP: <span id="prob-pp">—</span>
+    </div>
+    <div id="hint-box" id="hint-box">Tip: Adjust Z and energy, then place your bet!</div>
+    <div id="result-banner" class="banner-idle">Place a bet and spin the wheel!</div>
+  </div>
+
+  <div id="right-panel">
+    <div class="panel-box" id="chips-panel">
+      <h3>Chips</h3>
+      <div id="chips-display">100</div>
+      <div id="chips-label">chips remaining</div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Parameters</h3>
+      <div class="slider-row">
+        <label>Atomic Number (Z)</label>
+        <input type="range" id="z-slider" min="1" max="82" value="26" step="1">
+        <div class="slider-val"><span id="z-val">26 — Iron (Fe)</span></div>
+      </div>
+      <div class="slider-row">
+        <label>Photon Energy</label>
+        <input type="range" id="e-slider" min="0" max="100" value="40" step="1">
+        <div class="slider-val"><span id="e-val">—</span></div>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Place Bet (10 chips)</h3>
+      <button class="bet-btn bet-btn-pe" id="bet-pe">Bet: Photoelectric</button>
+      <button class="bet-btn bet-btn-c"  id="bet-c">Bet: Compton</button>
+      <button class="bet-btn bet-btn-pp" id="bet-pp">Bet: Pair Production</button>
+    </div>
+
+    <button id="spin-btn" disabled>SPIN</button>
+
+    <div class="panel-box">
+      <h3>Legend</h3>
+      <div class="legend-row"><div class="legend-dot" style="background:#e53935;"></div> Photoelectric Effect</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#1e88e5;"></div> Compton Scatter</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#43a047;"></div> Pair Production</div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Physics Note</h3>
+      <div id="edu-box">Adjust the sliders to see how atomic number (Z) and photon energy affect interaction probabilities.</div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="overlay-box">
+    <h2>Compton Roulette</h2>
+    <p>Adjust the atomic number (Z) and photon energy, then bet on which interaction will dominate. The wheel sectors reflect real relative cross-section probabilities!</p>
+    <button id="overlay-btn">Start Game</button>
+  </div>
+</div>
+
+<!-- CTRP-THEME-START -->
+<style>
+  :root { --ctrp-green:#166534; --ctrp-light:#dcfce7; --ctrp-muted:#4b5563; --ctrp-bg:#f0fdf4; }
+  .ctrp-header { display:flex; align-items:center; gap:12px; background:#fff; border-bottom:3px solid var(--ctrp-green); padding:10px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+  .ctrp-header h1.ctrp-title { margin:0; font-size:18px; font-weight:700; color:var(--ctrp-green); }
+  .ctrp-header .ctrp-subtitle { color:var(--ctrp-muted); font-size:12px; margin-top:2px; }
+  .ctrp-footer { background:var(--ctrp-bg); border-top:2px solid var(--ctrp-light); color:var(--ctrp-muted); font-size:11px; text-align:center; padding:8px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+</style>
+<script>
+(function () {
+  var TITLE = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML = '<div class="ctrp-title-block"><h1 class="ctrp-title">' + TITLE + '</h1>' + (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') + '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML = "&copy; " + new Date().getFullYear() + " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", apply); } else { apply(); }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+
+<script>
+// ============================================================
+// ELEMENT NAME TABLE
+// ============================================================
+var ELEMENTS = {
+  1:'Hydrogen (H)', 2:'Helium (He)', 3:'Lithium (Li)', 4:'Beryllium (Be)',
+  5:'Boron (B)', 6:'Carbon (C)', 7:'Nitrogen (N)', 8:'Oxygen (O)',
+  11:'Sodium (Na)', 13:'Aluminum (Al)', 14:'Silicon (Si)', 18:'Argon (Ar)',
+  19:'Potassium (K)', 20:'Calcium (Ca)', 22:'Titanium (Ti)', 26:'Iron (Fe)',
+  28:'Nickel (Ni)', 29:'Copper (Cu)', 30:'Zinc (Zn)', 32:'Germanium (Ge)',
+  36:'Krypton (Kr)', 42:'Molybdenum (Mo)', 47:'Silver (Ag)', 48:'Cadmium (Cd)',
+  50:'Tin (Sn)', 53:'Iodine (I)', 54:'Xenon (Xe)', 56:'Barium (Ba)',
+  63:'Europium (Eu)', 73:'Tantalum (Ta)', 74:'Tungsten (W)', 78:'Platinum (Pt)',
+  79:'Gold (Au)', 82:'Lead (Pb)'
+};
+
+function getElementName(z) {
+  // find nearest
+  var best = 1, bestDiff = 999;
+  for (var k in ELEMENTS) {
+    var diff = Math.abs(parseInt(k) - z);
+    if (diff < bestDiff) { bestDiff = diff; best = parseInt(k); }
+  }
+  return 'Z=' + z + ' — ' + ELEMENTS[best].replace(/\(.*\)/, '').trim() + ' (~' + ELEMENTS[best].match(/\(([^)]+)\)/)[1] + ')';
+}
+
+function getElementNameShort(z) {
+  var best = 1, bestDiff = 999;
+  for (var k in ELEMENTS) {
+    var diff = Math.abs(parseInt(k) - z);
+    if (diff < bestDiff) { bestDiff = diff; best = parseInt(k); }
+  }
+  var m = ELEMENTS[best].match(/\(([^)]+)\)/);
+  return z + ' — ' + (m ? ELEMENTS[best].replace(m[0], '').trim() + ' (' + m[1] + ')' : ELEMENTS[best]);
+}
+
+// ============================================================
+// ENERGY SCALE  (log scale: slider 0-100 → 10 keV - 10 MeV)
+// ============================================================
+function sliderToEnergy(val) {
+  // val 0..100 → 10 keV .. 10000 keV  (log scale)
+  var logMin = Math.log10(10);
+  var logMax = Math.log10(10000);
+  return Math.pow(10, logMin + (val / 100) * (logMax - logMin));
+}
+
+function energyLabel(keV) {
+  if (keV >= 1000) {
+    return (keV / 1000).toFixed(2).replace(/\.?0+$/, '') + ' MeV';
+  }
+  return Math.round(keV) + ' keV';
+}
+
+// ============================================================
+// PROBABILITY MODEL
+// ============================================================
+function getWeights(Z, keV) {
+  var pe = Math.pow(Z, 4) / Math.pow(keV, 3.5) * 100;
+  var pp = (keV > 1022) ? Math.pow(Z, 2) * Math.pow((keV - 1022) / 1000, 0.5) * 0.01 : 0;
+  var c  = Z * (1 / (1 + keV / 500)) * 50;
+  var total = pe + c + pp + 0.001;
+  return { pe: pe / total, c: c / total, pp: pp / total };
+}
+
+// ============================================================
+// CANVAS & STATE
+// ============================================================
+var canvas = document.getElementById('wheel');
+var ctx = canvas.getContext('2d');
+var CX = 210, CY = 210, R = 185, BALL_R = 11;
+
+var state = {
+  chips: 100,
+  bet: null,       // 'pe' | 'c' | 'pp' | null
+  Z: 26,
+  keV: 511,
+  weights: { pe: 0.33, c: 0.34, pp: 0.33 },
+  spinning: false,
+  ballAngle: 0,
+  ballSpeed: 0,
+  targetAngle: 0,
+  totalRotation: 0,
+  currentRotation: 0,
+  animId: null,
+  highlightSector: null,  // 'pe' | 'c' | 'pp' | null
+  winnerSector: null
+};
+
+// ============================================================
+// DRAW WHEEL
+// ============================================================
+var SECTOR_COLORS = {
+  pe:  { base: '#e53935', bright: '#ff6f60' },
+  c:   { base: '#1e88e5', bright: '#64b5f6' },
+  pp:  { base: '#43a047', bright: '#81c784' }
+};
+
+var SECTOR_LABELS = {
+  pe: 'Photoelectric',
+  c:  'Compton',
+  pp: 'Pair Production'
+};
+
+var SECTOR_ICONS = {
+  pe: 'PE',
+  c:  'C',
+  pp: 'PP'
+};
+
+function drawWheel(wheelAngle, highlightSector) {
+  ctx.clearRect(0, 0, 420, 420);
+
+  var w = state.weights;
+  var sectors = [
+    { key: 'pe', frac: w.pe },
+    { key: 'c',  frac: w.c  },
+    { key: 'pp', frac: w.pp }
+  ];
+
+  var startAngle = wheelAngle - Math.PI / 2;  // start from top
+
+  // Draw sectors
+  for (var i = 0; i < sectors.length; i++) {
+    var s = sectors[i];
+    var sweep = s.frac * 2 * Math.PI;
+    var endAngle = startAngle + sweep;
+    var isHighlight = (highlightSector === s.key);
+    var color = isHighlight ? SECTOR_COLORS[s.key].bright : SECTOR_COLORS[s.key].base;
+
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.arc(CX, CY, R, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Label inside sector
+    if (sweep > 0.18) {
+      var midAngle = startAngle + sweep / 2;
+      var labelR = R * 0.62;
+      var lx = CX + labelR * Math.cos(midAngle);
+      var ly = CY + labelR * Math.sin(midAngle);
+
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(midAngle + Math.PI / 2);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(SECTOR_ICONS[s.key], 1, 1);
+
+      ctx.fillStyle = '#fff';
+      ctx.fillText(SECTOR_ICONS[s.key], 0, 0);
+
+      if (sweep > 0.45) {
+        ctx.font = '11px Arial';
+        var words = SECTOR_LABELS[s.key].split(' ');
+        for (var wi = 0; wi < words.length; wi++) {
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillText(words[wi], 0, 22 + wi * 13);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    startAngle = endAngle;
+  }
+
+  // Outer ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI * 2);
+  ctx.strokeStyle = '#263238';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Tick marks on rim
+  for (var t = 0; t < 36; t++) {
+    var ta = (t / 36) * Math.PI * 2 + wheelAngle;
+    var ir = R - 10;
+    var or = R;
+    ctx.beginPath();
+    ctx.moveTo(CX + ir * Math.cos(ta), CY + ir * Math.sin(ta));
+    ctx.lineTo(CX + or * Math.cos(ta), CY + or * Math.sin(ta));
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Center hub
+  ctx.beginPath();
+  ctx.arc(CX, CY, 24, 0, Math.PI * 2);
+  ctx.fillStyle = '#263238';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SPIN', CX, CY);
+
+  // Pointer arrow at top
+  ctx.beginPath();
+  ctx.moveTo(CX, CY - R - 18);
+  ctx.lineTo(CX - 9, CY - R + 4);
+  ctx.lineTo(CX + 9, CY - R + 4);
+  ctx.closePath();
+  ctx.fillStyle = '#ffd600';
+  ctx.fill();
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawBall(angle) {
+  var ballR = R - 18;
+  var bx = CX + ballR * Math.cos(angle);
+  var by = CY + ballR * Math.sin(angle);
+
+  // Shadow
+  ctx.beginPath();
+  ctx.arc(bx + 2, by + 2, BALL_R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fill();
+
+  // Ball
+  ctx.beginPath();
+  ctx.arc(bx, by, BALL_R, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.strokeStyle = '#aaa';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Shine
+  ctx.beginPath();
+  ctx.arc(bx - 3, by - 3, 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fill();
+}
+
+function render() {
+  drawWheel(state.currentRotation, state.highlightSector);
+  if (state.spinning || state.winnerSector !== null) {
+    drawBall(state.ballAngle);
+  }
+}
+
+// ============================================================
+// DETERMINE SECTOR AT ANGLE
+// ============================================================
+function getSectorAtAngle(angle) {
+  // Normalize angle to 0..2PI
+  var a = ((angle + Math.PI / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+  // Sectors start from top (angle 0 = top after offset)
+  var w = state.weights;
+  var peBound = w.pe * Math.PI * 2;
+  var cBound   = peBound + w.c * Math.PI * 2;
+  if (a < peBound) return 'pe';
+  if (a < cBound)  return 'c';
+  return 'pp';
+}
+
+// ============================================================
+// SPIN ANIMATION
+// ============================================================
+function spin() {
+  if (state.spinning) return;
+  if (state.bet === null) {
+    setResultBanner('Please place a bet first!', 'idle');
+    return;
+  }
+  if (state.chips < 10) {
+    setResultBanner('Not enough chips! Game over.', 'lose');
+    return;
+  }
+
+  state.chips -= 10;
+  updateChips();
+
+  state.spinning = true;
+  state.highlightSector = null;
+  state.winnerSector = null;
+  document.getElementById('spin-btn').disabled = true;
+  disableBetBtns(true);
+
+  // Random total rotation: 3-5 full rotations + random extra
+  var rotations = 3 + Math.random() * 2;
+  var extraAngle = Math.random() * Math.PI * 2;
+  state.targetAngle = state.currentRotation + rotations * Math.PI * 2 + extraAngle;
+  state.totalRotation = state.targetAngle - state.currentRotation;
+
+  // Ball starts at top, goes opposite direction
+  state.ballAngle = -Math.PI / 2;  // top
+  state.ballSpeed = 0.20;
+
+  var startTime = null;
+  var duration = 2500 + Math.random() * 800;  // ms
+
+  function animate(timestamp) {
+    if (!startTime) startTime = timestamp;
+    var elapsed = timestamp - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+
+    // Ease out
+    var eased = 1 - Math.pow(1 - progress, 3);
+    state.currentRotation = (state.targetAngle - state.totalRotation) + eased * state.totalRotation;
+
+    // Ball moves against wheel direction, decelerates
+    var ballProgress = Math.min(elapsed / (duration * 0.9), 1);
+    var ballEased = 1 - Math.pow(1 - ballProgress, 2);
+    var ballTotalAngle = rotations * Math.PI * 2 + extraAngle;
+    state.ballAngle = -Math.PI / 2 - ballEased * ballTotalAngle * 1.4;
+
+    render();
+
+    if (progress < 1) {
+      state.animId = requestAnimationFrame(animate);
+    } else {
+      state.currentRotation = state.targetAngle;
+      state.spinning = false;
+      // Determine result: where does the pointer (top) land on the wheel?
+      var winner = getSectorAtAngle(state.currentRotation);
+      state.winnerSector = winner;
+      state.highlightSector = winner;
+      // Park ball at top (pointer position)
+      state.ballAngle = -Math.PI / 2;
+      render();
+      showResult(winner);
+    }
+  }
+
+  state.animId = requestAnimationFrame(animate);
+}
+
+function showResult(winner) {
+  var names = { pe: 'PHOTOELECTRIC EFFECT', c: 'COMPTON SCATTER', pp: 'PAIR PRODUCTION' };
+  var betNames = { pe: 'Photoelectric', c: 'Compton', pp: 'Pair Production' };
+  var won = (winner === state.bet);
+  var resultTxt, bannerClass;
+
+  if (won) {
+    state.chips += 20;
+    resultTxt = names[winner] + '! You bet ' + betNames[winner] + ' — WIN +20 chips!';
+    bannerClass = 'banner-win';
+  } else {
+    resultTxt = names[winner] + '! You bet ' + betNames[state.bet] + ' — LOSS -10 chips.';
+    bannerClass = 'banner-lose';
+  }
+
+  updateChips();
+  setResultBanner(resultTxt, bannerClass === 'banner-win' ? 'win' : 'lose');
+
+  // Education message
+  setEduMsg(winner, state.Z, state.keV);
+
+  // Re-enable
+  setTimeout(function() {
+    document.getElementById('spin-btn').disabled = false;
+    disableBetBtns(false);
+    state.bet = null;
+    resetBetBtns();
+  }, 1500);
+
+  if (state.chips <= 0) {
+    setTimeout(function() {
+      setResultBanner('Out of chips! Game over.', 'lose');
+      document.getElementById('spin-btn').disabled = true;
+    }, 1600);
+  }
+}
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function updateChips() {
+  document.getElementById('chips-display').textContent = state.chips;
+}
+
+function setResultBanner(txt, type) {
+  var el = document.getElementById('result-banner');
+  el.textContent = txt;
+  el.className = 'banner-' + type;
+}
+
+function setEduMsg(winner, Z, keV) {
+  var msgs = {
+    pe:  'Photoelectric effect dominates at low energy in high-Z materials — essential for medical X-ray imaging (lead aprons, Pb shielding).',
+    c:   'Compton scatter is dominant in soft tissue at diagnostic energies (~100 keV – 2 MeV) — major source of scatter in CT and radiography.',
+    pp:  'Pair production requires E > 1.022 MeV and is significant in high-Z materials at therapy energies — annihilation produces two 511 keV photons.'
+  };
+  document.getElementById('edu-box').innerHTML = '<b>' + (winner === 'pe' ? 'Photoelectric' : winner === 'c' ? 'Compton' : 'Pair Production') + ':</b> ' + msgs[winner];
+}
+
+function disableBetBtns(disabled) {
+  document.getElementById('bet-pe').disabled = disabled;
+  document.getElementById('bet-c').disabled = disabled;
+  document.getElementById('bet-pp').disabled = disabled;
+}
+
+function resetBetBtns() {
+  document.getElementById('bet-pe').className = 'bet-btn bet-btn-pe';
+  document.getElementById('bet-c').className  = 'bet-btn bet-btn-c';
+  document.getElementById('bet-pp').className = 'bet-btn bet-btn-pp';
+}
+
+function updateProbDisplay() {
+  var w = state.weights;
+  document.getElementById('prob-pe').textContent = Math.round(w.pe * 100) + '%';
+  document.getElementById('prob-c').textContent  = Math.round(w.c  * 100) + '%';
+  document.getElementById('prob-pp').textContent = Math.round(w.pp * 100) + '%';
+
+  // Hint
+  var dominant = (w.pe >= w.c && w.pe >= w.pp) ? 'Photoelectric Effect' : (w.c >= w.pp) ? 'Compton Scatter' : 'Pair Production';
+  document.getElementById('hint-box').textContent = 'Tip: At Z=' + state.Z + ', ' + energyLabel(state.keV) + ' — ' + dominant + ' is most likely.';
+}
+
+// ============================================================
+// SLIDER HANDLERS
+// ============================================================
+var zSlider = document.getElementById('z-slider');
+var eSlider = document.getElementById('e-slider');
+
+function onSliderChange() {
+  state.Z   = parseInt(zSlider.value);
+  state.keV = sliderToEnergy(parseInt(eSlider.value));
+  state.weights = getWeights(state.Z, state.keV);
+
+  document.getElementById('z-val').textContent = getElementNameShort(state.Z);
+  document.getElementById('e-val').textContent = energyLabel(state.keV);
+
+  updateProbDisplay();
+  if (!state.spinning) render();
+}
+
+zSlider.addEventListener('input', onSliderChange);
+eSlider.addEventListener('input', onSliderChange);
+
+// ============================================================
+// BET BUTTONS
+// ============================================================
+document.getElementById('bet-pe').addEventListener('click', function() {
+  state.bet = 'pe';
+  resetBetBtns();
+  document.getElementById('bet-pe').className = 'bet-btn bet-btn-pe selected';
+  document.getElementById('spin-btn').disabled = false;
+  setResultBanner('Bet placed: Photoelectric Effect (10 chips). Spin!', 'idle');
+});
+
+document.getElementById('bet-c').addEventListener('click', function() {
+  state.bet = 'c';
+  resetBetBtns();
+  document.getElementById('bet-c').className = 'bet-btn bet-btn-c selected';
+  document.getElementById('spin-btn').disabled = false;
+  setResultBanner('Bet placed: Compton Scatter (10 chips). Spin!', 'idle');
+});
+
+document.getElementById('bet-pp').addEventListener('click', function() {
+  state.bet = 'pp';
+  resetBetBtns();
+  document.getElementById('bet-pp').className = 'bet-btn bet-btn-pp selected';
+  document.getElementById('spin-btn').disabled = false;
+  setResultBanner('Bet placed: Pair Production (10 chips). Spin!', 'idle');
+});
+
+document.getElementById('spin-btn').addEventListener('click', spin);
+
+// ============================================================
+// OVERLAY
+// ============================================================
+document.getElementById('overlay-btn').addEventListener('click', function() {
+  document.getElementById('overlay').classList.add('hidden');
+  onSliderChange();
+  render();
+});
+
+// ============================================================
+// INIT
+// ============================================================
+state.keV = sliderToEnergy(40);
+state.Z = 26;
+state.weights = getWeights(state.Z, state.keV);
+document.getElementById('z-val').textContent = getElementNameShort(state.Z);
+document.getElementById('e-val').textContent = energyLabel(state.keV);
+updateProbDisplay();
+render();
+</script>
+</body>
+</html>

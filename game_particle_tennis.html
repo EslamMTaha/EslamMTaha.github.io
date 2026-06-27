@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Particle Tennis — Radiation Interaction Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f5f7fa;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+#game-wrap {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 18px 12px 8px 12px;
+  gap: 16px;
+}
+#canvas-container {
+  position: relative;
+  flex-shrink: 0;
+}
+#court {
+  display: block;
+  border: 3px solid #1a237e;
+  border-radius: 4px;
+}
+#canvas-flash {
+  position: absolute;
+  top: 0; left: 0;
+  width: 820px; height: 460px;
+  pointer-events: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+#right-panel {
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+}
+.panel-box h3 {
+  color: #1a237e;
+  font-size: 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+#score-display {
+  text-align: center;
+}
+#score-display .score-nums {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1a237e;
+  letter-spacing: 4px;
+}
+#score-display .score-label {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+}
+#score-display .first-to {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+}
+#particle-info {
+  font-size: 13px;
+}
+#particle-info .pi-label {
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.pi-gamma { background: #fff9c4; color: #f57f17; }
+.pi-neutron { background: #e0f7fa; color: #006064; }
+#particle-info .pi-type {
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  margin-bottom: 4px;
+}
+#result-msg {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 4px;
+  min-height: 50px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.msg-correct { background: #e8f5e9; color: #2e7d32; }
+.msg-wrong   { background: #ffebee; color: #c62828; }
+.msg-neutral { background: #f5f5f5; color: #555; }
+#material-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mat-btn {
+  padding: 9px 6px;
+  border: 2px solid #1a237e;
+  border-radius: 5px;
+  background: #fff;
+  color: #1a237e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mat-btn:hover { background: #1a237e; color: #fff; }
+.mat-btn:disabled { border-color: #ccc; color: #aaa; cursor: not-allowed; background: #f9f9f9; }
+.mat-btn.correct-flash { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+.mat-btn.wrong-flash   { background: #c62828; color: #fff; border-color: #c62828; }
+#serve-btn {
+  width: 100%;
+  padding: 11px;
+  background: #1a237e;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+#serve-btn:hover { background: #283593; }
+#serve-btn:disabled { background: #9e9e9e; cursor: not-allowed; }
+#serve-btn-wrap { display: none; }
+#how-to {
+  font-size: 11px;
+  color: #555;
+  line-height: 1.5;
+}
+/* Overlay */
+#overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+#overlay-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 36px 44px;
+  text-align: center;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+#overlay-box h2 {
+  color: #1a237e;
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+#overlay-box p {
+  color: #555;
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+#overlay-box button {
+  padding: 12px 32px;
+  background: #1a237e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#overlay-box button:hover { background: #283593; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="game-wrap">
+  <div id="canvas-container">
+    <canvas id="court" width="820" height="460"></canvas>
+    <div id="canvas-flash"></div>
+  </div>
+
+  <div id="right-panel">
+    <div class="panel-box" id="score-display">
+      <h3>Score</h3>
+      <div class="score-nums"><span id="pt-score">0 — 0</span></div>
+      <div class="score-label" id="pt-label">You &nbsp; — &nbsp; Opponent</div>
+      <div class="first-to" id="game-score-disp">Games: 0 — 0</div>
+    </div>
+
+    <div class="panel-box" id="particle-info">
+      <h3>Incoming Particle</h3>
+      <div class="pi-label pi-neutral" id="pi-label">—</div>
+      <div class="pi-type" id="pi-type">Press "Serve" to start</div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Choose Material</h3>
+      <div id="material-btns">
+        <button class="mat-btn" id="mat0" disabled></button>
+        <button class="mat-btn" id="mat1" disabled></button>
+        <button class="mat-btn" id="mat2" disabled></button>
+        <button class="mat-btn" id="mat3" disabled></button>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <div id="result-msg" class="msg-neutral">Make your selection!</div>
+    </div>
+
+    <div class="panel-box" id="serve-btn-wrap">
+      <button id="serve-btn">SERVE</button>
+    </div>
+
+    <div class="panel-box">
+      <div id="how-to">
+        <b>How to play:</b><br>
+        1. Watch the incoming particle label.<br>
+        2. Click the correct material to SCATTER it back.<br>
+        3. Wrong choice = opponent scores.<br>
+        4. First to 7 wins!
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="overlay-box">
+    <h2 id="overlay-title">Particle Tennis</h2>
+    <p id="overlay-msg">Use your knowledge of radiation interactions to deflect particles back at the opponent. Choose the correct material for each particle type and energy!</p>
+    <button id="overlay-btn">Start Game</button>
+  </div>
+</div>
+
+<!-- CTRP-THEME-START -->
+<style>
+  :root { --ctrp-green:#166534; --ctrp-light:#dcfce7; --ctrp-muted:#4b5563; --ctrp-bg:#f0fdf4; }
+  .ctrp-header { display:flex; align-items:center; gap:12px; background:#fff; border-bottom:3px solid var(--ctrp-green); padding:10px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+  .ctrp-header h1.ctrp-title { margin:0; font-size:18px; font-weight:700; color:var(--ctrp-green); }
+  .ctrp-header .ctrp-subtitle { color:var(--ctrp-muted); font-size:12px; margin-top:2px; }
+  .ctrp-footer { background:var(--ctrp-bg); border-top:2px solid var(--ctrp-light); color:var(--ctrp-muted); font-size:11px; text-align:center; padding:8px 20px; font-family:Arial,sans-serif; flex-shrink:0; }
+</style>
+<script>
+(function () {
+  var TITLE = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML = '<div class="ctrp-title-block"><h1 class="ctrp-title">' + TITLE + '</h1>' + (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') + '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML = "&copy; " + new Date().getFullYear() + " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", apply); } else { apply(); }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+
+<script>
+// ============================================================
+// PARTICLE DATA — scatter-focused: pick the material that
+// scatters the particle BACK, not one that absorbs it
+// ============================================================
+var PARTICLES = [
+  {type:'gamma',   label:'γ 511 keV',  correct:'Water/Tissue', reason:'Compton scatter at 511 keV in low-Z tissue deflects the photon back. Lead would absorb it via photoelectric.'},
+  {type:'gamma',   label:'γ 1.25 MeV', correct:'Water/Tissue', reason:'Compton scatter dominates in tissue up to ~2 MeV — photon scatters back. Pb mostly absorbs at this energy.'},
+  {type:'gamma',   label:'γ 140 keV',  correct:'Water/Tissue', reason:'In soft tissue, Compton scatter is dominant — the photon deflects. Lead absorbs low-energy photons.'},
+  {type:'neutron', label:'n 2 MeV',    correct:'Polyethylene', reason:'Hydrogen atoms in polyethylene scatter fast neutrons elastically — nearly equal masses give maximum rebound.'},
+  {type:'neutron', label:'n 14 MeV',   correct:'Polyethylene', reason:'H nuclei (mass ≈ neutron mass) maximise elastic scatter momentum transfer — neutron bounces back.'},
+  {type:'gamma',   label:'γ 662 keV',  correct:'Water/Tissue', reason:'Cs-137 photons scatter via Compton in tissue — pick water to deflect. Lead absorbs, Steel mostly too.'},
+  {type:'neutron', label:'n 1 MeV',    correct:'Polyethylene', reason:'Elastic scatter off H in polyethylene returns the neutron. Lead and Steel cause inelastic absorption.'},
+  {type:'gamma',   label:'γ 80 keV',   correct:'Water/Tissue', reason:'Even at low energy, Compton scatter occurs in tissue. Avoid Lead — it absorbs via photoelectric effect.'},
+  {type:'neutron', label:'n 8 MeV',    correct:'Polyethylene', reason:'Fast neutrons rebound elastically from hydrogen. Concrete gives some scatter but polyethylene is far better.'},
+  {type:'gamma',   label:'γ 2.6 MeV',  correct:'Water/Tissue', reason:'Above 1 MeV, Compton in tissue still scatters. Pair production in Pb destroys the photon — no rebound.'}
+];
+
+// Material option pools per particle type
+var GAMMA_OPTS   = ['Water/Tissue', 'Lead (Pb)', 'Steel', 'Concrete', 'Aluminum', 'Air'];
+var NEUTRON_OPTS = ['Polyethylene', 'Lead (Pb)', 'Concrete', 'Steel', 'Air', 'Water/Tissue'];
+
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+function getOptions(particle) {
+  var pool = (particle.type === 'neutron') ? NEUTRON_OPTS : GAMMA_OPTS;
+  var correct = particle.correct;
+  var others = shuffle(pool.filter(function(x){ return x !== correct; })).slice(0, 3);
+  var opts = shuffle([correct].concat(others));
+  return opts;
+}
+
+// ============================================================
+// TENNIS SCORING HELPERS
+// ============================================================
+function tennisPt(n, isDeuce, hasAdv) {
+  if (isDeuce) return 'Deuce';
+  if (hasAdv) return 'Adv';
+  var labels = ['0', '15', '30', '40'];
+  return labels[Math.min(n, 3)];
+}
+
+function ptDisplay(pp, po, deuce, advP, advO) {
+  if (deuce) return 'Deuce';
+  if (advP)  return 'Adv — 40';
+  if (advO)  return '40 — Adv';
+  return tennisPt(pp, false, false) + ' — ' + tennisPt(po, false, false);
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+var canvas = document.getElementById('court');
+var ctx = canvas.getContext('2d');
+var W = 820, H = 460;
+
+var state = {
+  // Tennis scoring
+  ptP: 0, ptO: 0,      // raw points in current game
+  gamesP: 0, gamesO: 0, // games won in set
+  deuce: false, advP: false, advO: false,
+  // Ball
+  particleIdx: 0,
+  phase: 'idle',
+  ballX: 0, ballY: 0, ballVX: 0, ballVY: 0,
+  paddleY: H / 2,
+  currentParticle: null,
+  currentOptions: [],
+  correct: false,
+  animId: null,
+  buttonsShown: false
+};
+
+// Paddle settings
+var PADDLE_H = 70;
+var PADDLE_W = 14;
+var PADDLE_X = W - 30;
+var OPP_X = 30;
+var OPP_Y = H / 2;
+var BALL_R = 13;
+
+// Keyboard
+var keys = {};
+document.addEventListener('keydown', function(e) { keys[e.key] = true; });
+document.addEventListener('keyup',   function(e) { keys[e.key] = false; });
+
+// ============================================================
+// DRAWING
+// ============================================================
+function drawCourt() {
+  // Court surface
+  ctx.fillStyle = '#2e7d32';
+  ctx.fillRect(0, 0, W, H);
+
+  // Outer border lines
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(18, 18, W - 36, H - 36);
+
+  // Service boxes — horizontal mid line
+  ctx.beginPath();
+  ctx.moveTo(18, H / 2);
+  ctx.lineTo(W - 18, H / 2);
+  ctx.stroke();
+
+  // Service boxes — vertical mid line (net side)
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 18);
+  ctx.lineTo(W / 2, H - 18);
+  ctx.stroke();
+
+  // Net
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(W / 2 - 3, 0, 6, H);
+  // Net posts
+  ctx.fillStyle = '#bdbdbd';
+  ctx.fillRect(W / 2 - 5, 0, 10, 14);
+  ctx.fillRect(W / 2 - 5, H - 14, 10, 14);
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+}
+
+function drawOpponent() {
+  // Opponent avatar
+  ctx.beginPath();
+  ctx.arc(OPP_X + 10, OPP_Y, 22, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff6f00';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SRC', OPP_X + 10, OPP_Y);
+}
+
+function drawPaddle() {
+  var py = state.paddleY - PADDLE_H / 2;
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(PADDLE_X + 3, py + 3, PADDLE_W, PADDLE_H);
+  // Paddle body
+  ctx.fillStyle = '#1a237e';
+  ctx.fillRect(PADDLE_X, py, PADDLE_W, PADDLE_H);
+  ctx.strokeStyle = '#90caf9';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(PADDLE_X, py, PADDLE_W, PADDLE_H);
+
+  // Label
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 9px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YOU', PADDLE_X + PADDLE_W / 2, state.paddleY);
+}
+
+function drawBall() {
+  if (state.phase === 'idle' || state.phase === 'result') return;
+  var p = state.currentParticle;
+  var color = (p.type === 'gamma') ? '#ffd600' : '#00e5ff';
+  var glow  = (p.type === 'gamma') ? '#ff6f00' : '#006064';
+
+  // Glow effect
+  ctx.beginPath();
+  ctx.arc(state.ballX, state.ballY, BALL_R + 6, 0, Math.PI * 2);
+  ctx.fillStyle = (p.type === 'gamma') ? 'rgba(255,214,0,0.25)' : 'rgba(0,229,255,0.25)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(state.ballX, state.ballY, BALL_R, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = glow;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Label
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 9px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(p.label, state.ballX, state.ballY);
+}
+
+function drawScore() {
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.fillRect(W / 2 - 80, 0, 160, 38);
+  ctx.fillStyle = '#1a237e';
+  ctx.font = 'bold 18px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  var ptTxt = ptDisplay(state.ptP, state.ptO, state.deuce, state.advP, state.advO);
+  ctx.fillText(ptTxt, W / 2, 14);
+  ctx.font = '11px Arial';
+  ctx.fillStyle = '#555';
+  ctx.fillText('Games: ' + state.gamesP + ' — ' + state.gamesO, W / 2, 30);
+}
+
+function updateScorePanel() {
+  var ptTxt = ptDisplay(state.ptP, state.ptO, state.deuce, state.advP, state.advO);
+  document.getElementById('pt-score').textContent = ptTxt;
+  document.getElementById('game-score-disp').textContent = 'Games: ' + state.gamesP + ' — ' + state.gamesO;
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  drawCourt();
+  drawOpponent();
+  drawPaddle();
+  drawBall();
+  drawScore();
+}
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+function gameLoop() {
+  // Move paddle
+  if (keys['ArrowUp']   || keys['w'] || keys['W']) state.paddleY = Math.max(PADDLE_H / 2 + 18, state.paddleY - 5);
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) state.paddleY = Math.min(H - PADDLE_H / 2 - 18, state.paddleY + 5);
+
+  if (state.phase === 'flying') {
+    state.ballX += state.ballVX;
+    state.ballY += state.ballVY;
+
+    // Bounce off top/bottom walls
+    if (state.ballY < 18 + BALL_R || state.ballY > H - 18 - BALL_R) {
+      state.ballVY = -state.ballVY;
+      state.ballY = Math.max(18 + BALL_R, Math.min(H - 18 - BALL_R, state.ballY));
+    }
+
+    // Ball goes past player without choosing → opponent scores
+    if (state.ballX > W + BALL_R) {
+      opponentScores();
+    }
+  } else if (state.phase === 'returning') {
+    state.ballX += state.ballVX;
+    state.ballY += state.ballVY;
+
+    if (state.ballY < 18 + BALL_R || state.ballY > H - 18 - BALL_R) {
+      state.ballVY = -state.ballVY;
+      state.ballY = Math.max(18 + BALL_R, Math.min(H - 18 - BALL_R, state.ballY));
+    }
+
+    // Ball returns past opponent side
+    if (state.ballX < -BALL_R) {
+      playerScores();
+    }
+  }
+
+  render();
+  if (state.phase !== 'idle' && state.phase !== 'result') {
+    state.animId = requestAnimationFrame(gameLoop);
+  }
+}
+
+// ============================================================
+// GAME LOGIC
+// ============================================================
+function getParticle() {
+  var p = PARTICLES[state.particleIdx % PARTICLES.length];
+  state.particleIdx++;
+  return p;
+}
+
+function startRally() {
+  state.phase = 'flying';
+  state.buttonsShown = false;
+  state.correct = false;
+  state.currentParticle = getParticle();
+  state.currentOptions = getOptions(state.currentParticle);
+
+  state.ballX = OPP_X + 40;
+  state.ballY = OPP_Y + (Math.random() - 0.5) * 60;
+  state.ballVX = 2.1 + Math.random() * 0.9;
+  state.ballVY = (Math.random() - 0.5) * 2.0;
+
+  var lbl = document.getElementById('pi-label');
+  lbl.textContent = state.currentParticle.label;
+  lbl.className = 'pi-label ' + (state.currentParticle.type === 'gamma' ? 'pi-gamma' : 'pi-neutron');
+  document.getElementById('pi-type').textContent = (state.currentParticle.type === 'gamma' ? 'Gamma Photon' : 'Fast Neutron');
+  setResultMsg('Choose the scatter material!', 'neutral');
+
+  // Show buttons immediately — player has full flight time to decide
+  showButtons();
+
+  if (state.animId) cancelAnimationFrame(state.animId);
+  state.animId = requestAnimationFrame(gameLoop);
+}
+
+function showButtons() {
+  var opts = state.currentOptions;
+  for (var i = 0; i < 4; i++) {
+    var btn = document.getElementById('mat' + i);
+    btn.textContent = opts[i];
+    btn.disabled = false;
+    btn.className = 'mat-btn';
+  }
+}
+
+function disableButtons() {
+  for (var i = 0; i < 4; i++) {
+    var btn = document.getElementById('mat' + i);
+    btn.disabled = true;
+    btn.className = 'mat-btn';
+    btn.textContent = '—';
+  }
+}
+
+// Both hydrogenous materials scatter fast neutrons elastically (H ≈ neutron mass).
+// Polyethylene is the canonical answer, but water/tissue is equally valid.
+function acceptedMaterials(particle) {
+  if (particle.type === 'neutron') return ['Polyethylene', 'Water/Tissue'];
+  return [particle.correct];
+}
+
+function onMaterialChoice(idx) {
+  if (state.phase !== 'flying') return;
+  for (var i = 0; i < 4; i++) document.getElementById('mat' + i).disabled = true;
+
+  var chosen = state.currentOptions[idx];
+  var correct = state.currentParticle.correct;
+  var accepted = acceptedMaterials(state.currentParticle);
+  var isAccepted = accepted.indexOf(chosen) !== -1;
+
+  if (isAccepted) {
+    document.getElementById('mat' + idx).className = 'mat-btn correct-flash';
+    state.correct = true;
+    var msg = (chosen === 'Water/Tissue' && state.currentParticle.type === 'neutron')
+      ? 'Scattered! Hydrogen in water elastically scatters fast neutrons just like polyethylene — both are excellent moderators.'
+      : 'Scattered! ' + state.currentParticle.reason;
+    setResultMsg(msg, 'correct');
+    flashCanvas('correct');
+    state.ballVX = -Math.abs(state.ballVX) - 1;
+    state.phase = 'returning';
+  } else {
+    document.getElementById('mat' + idx).className = 'mat-btn wrong-flash';
+    for (var j = 0; j < 4; j++) {
+      if (accepted.indexOf(state.currentOptions[j]) !== -1) document.getElementById('mat' + j).className = 'mat-btn correct-flash';
+    }
+    setResultMsg('Absorbed! Correct: ' + correct + '. ' + state.currentParticle.reason, 'wrong');
+    flashCanvas('wrong');
+    awardPoint('opp');
+  }
+}
+
+// ---- Tennis scoring ----
+function awardPoint(who) {
+  cancelAnimationFrame(state.animId);
+  state.phase = 'result';
+  render();
+
+  var gameOver = false;
+  if (who === 'player') {
+    if (state.deuce) { state.deuce = false; state.advP = true; }
+    else if (state.advO) { state.advO = false; state.deuce = true; }
+    else if (state.advP) { gameOver = true; winGame('player'); return; }
+    else {
+      state.ptP++;
+      if (state.ptP >= 3 && state.ptO >= 3) { state.deuce = true; state.ptP = 3; state.ptO = 3; }
+      else if (state.ptP > 3) { gameOver = true; winGame('player'); return; }
+    }
+  } else {
+    if (state.deuce) { state.deuce = false; state.advO = true; }
+    else if (state.advP) { state.advP = false; state.deuce = true; }
+    else if (state.advO) { gameOver = true; winGame('opp'); return; }
+    else {
+      state.ptO++;
+      if (state.ptP >= 3 && state.ptO >= 3) { state.deuce = true; state.ptP = 3; state.ptO = 3; }
+      else if (state.ptO > 3) { gameOver = true; winGame('opp'); return; }
+    }
+  }
+  updateScorePanel();
+  setTimeout(startRally, 1800);
+}
+
+function winGame(who) {
+  if (who === 'player') state.gamesP++;
+  else state.gamesO++;
+  // Reset point state
+  state.ptP = 0; state.ptO = 0;
+  state.deuce = false; state.advP = false; state.advO = false;
+  updateScorePanel();
+
+  // Check set win: first to 6 games, with 2-game lead; or 7-5
+  var p = state.gamesP, o = state.gamesO;
+  var setWon = (p >= 6 && p - o >= 2) || p >= 7 || (o >= 6 && o - p >= 2) || o >= 7;
+  if (setWon) {
+    if (state.gamesP > state.gamesO) {
+      showOverlay('You Win the Set!', 'Final: ' + state.gamesP + '-' + state.gamesO + '. Excellent knowledge of radiation scatter interactions!', 'Play Again');
+    } else {
+      showOverlay('Opponent Wins the Set', 'Final: ' + state.gamesP + '-' + state.gamesO + '. Review which materials cause scatter vs absorption and try again.', 'Try Again');
+    }
+  } else {
+    var msg = who === 'player' ? 'Game! You lead ' + state.gamesP + '-' + state.gamesO : 'Game to opponent! ' + state.gamesP + '-' + state.gamesO;
+    setResultMsg(msg, who === 'player' ? 'correct' : 'wrong');
+    setTimeout(startRally, 2000);
+  }
+}
+
+function playerScores() {
+  awardPoint('player');
+}
+
+function opponentScores() {
+  if (!state.correct) {
+    setResultMsg('Particle passed! ' + (state.currentParticle ? state.currentParticle.reason : ''), 'wrong');
+  }
+  awardPoint('opp');
+}
+
+function flashCanvas(type) {
+  var fl = document.getElementById('canvas-flash');
+  fl.style.boxShadow = (type === 'correct') ? 'inset 0 0 30px 10px rgba(46,125,50,0.55)' : 'inset 0 0 30px 10px rgba(198,40,40,0.55)';
+  fl.style.opacity = '1';
+  setTimeout(function() { fl.style.opacity = '0'; fl.style.boxShadow = 'none'; }, 500);
+}
+
+function setResultMsg(txt, type) {
+  var el = document.getElementById('result-msg');
+  el.textContent = txt;
+  el.className = 'msg-' + type;
+}
+
+function showOverlay(title, msg, btnTxt) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-msg').textContent = msg;
+  document.getElementById('overlay-btn').textContent = btnTxt;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function resetGame() {
+  if (state.animId) cancelAnimationFrame(state.animId);
+  state.ptP = 0; state.ptO = 0;
+  state.gamesP = 0; state.gamesO = 0;
+  state.deuce = false; state.advP = false; state.advO = false;
+  state.particleIdx = 0;
+  state.phase = 'idle';
+  state.currentParticle = null;
+  state.buttonsShown = false;
+  state.correct = false;
+
+  updateScorePanel();
+  document.getElementById('pi-label').textContent = '—';
+  document.getElementById('pi-label').className = 'pi-label pi-neutral';
+  document.getElementById('pi-type').textContent = 'Starting...';
+  setResultMsg('Get ready!', 'neutral');
+  disableButtons();
+  render();
+  setTimeout(startRally, 800);
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+document.getElementById('overlay-btn').addEventListener('click', function() {
+  document.getElementById('overlay').classList.add('hidden');
+  resetGame();
+});
+
+for (var _i = 0; _i < 4; _i++) {
+  (function(idx) {
+    document.getElementById('mat' + idx).addEventListener('click', function() {
+      onMaterialChoice(idx);
+    });
+  })(_i);
+}
+
+// Prevent arrow key scrolling
+window.addEventListener('keydown', function(e) {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].indexOf(e.key) !== -1) {
+    e.preventDefault();
+  }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+render();
+</script>
+</body>
+</html>

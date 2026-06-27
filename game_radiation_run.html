@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radiation Run | RadLab Games</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f5f7fa;color:#222;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.layout{display:flex;flex:1;overflow:hidden;min-height:0}
+/* canvas area */
+.canvas-wrap{display:flex;flex-direction:column;flex:1;min-width:0;padding:8px 6px 8px 8px;gap:5px;overflow:hidden}
+.dose-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.dose-lbl{font-size:11px;font-weight:bold;color:#b71c1c;min-width:110px}
+.dose-bar-outer{flex:1;height:14px;background:#e0e0e0;border-radius:7px;overflow:hidden;border:1px solid #bbb}
+.dose-bar-inner{height:100%;background:linear-gradient(90deg,#43a047,#f9a825,#e53935);border-radius:7px;transition:width .08s;width:0%}
+.dose-limit{font-size:11px;color:#555;min-width:80px;text-align:right}
+canvas#gc{border:1px solid #999;display:block;flex:1 1 0;min-height:0;width:100%;height:100%;object-fit:contain;background:#0d1117}
+.score-row{display:flex;gap:20px;font-size:11px;color:#444;flex-shrink:0}
+.score-row b{color:#1a237e}
+/* Right panel */
+.panel{width:270px;background:white;border-left:1px solid #ddd;padding:14px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;gap:11px;font-size:13px}
+.panel h2{font-size:12px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:1px;padding-bottom:5px;border-bottom:1px solid #e8eaf6}
+/* Contamination list */
+.contam-item{background:#fff8e1;border-left:3px solid #ff9800;border-radius:3px;padding:6px 8px;line-height:1.6;margin-bottom:4px;font-size:12px}
+.contam-item.crit{background:#ffebee;border-color:#e53935}
+.cbar-outer{height:5px;background:#e0e0e0;border-radius:2px;margin-top:4px}
+.cbar-inner{height:100%;border-radius:2px}
+/* Inventory */
+.inv-grid{display:flex;gap:6px;flex-wrap:wrap}
+.inv-btn{background:#f5f5f5;border:1px solid #ddd;border-radius:5px;padding:6px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .15s}
+.inv-btn:hover{background:#e3f2fd;border-color:#90caf9}
+.inv-btn .cnt{font-weight:bold;color:#1a237e;min-width:14px}
+/* Effects line */
+.effects-line{min-height:20px;font-size:12px;color:#555}
+/* Source guide */
+.guide{font-size:12px;color:#444;line-height:2.1}
+/* Controls */
+.ctrls{font-size:12px;color:#666;line-height:2.0}
+/* New game button */
+.btn-start{width:100%;padding:9px;background:#1a237e;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;font-weight:bold;margin-top:auto}
+.btn-start:hover{background:#283593}
+.empty-note{color:#aaa;font-size:11px;padding:2px 0}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="canvas-wrap">
+    <div class="dose-row">
+      <div class="dose-lbl" id="doseLbl">DOSE: 0 &micro;Sv</div>
+      <div class="dose-bar-outer"><div class="dose-bar-inner" id="doseBar"></div></div>
+      <div class="dose-limit">Limit: 5000 &micro;Sv</div>
+    </div>
+    <canvas id="gc" width="820" height="478"></canvas>
+    <div class="score-row">
+      <div>Score: <b id="sScore">0</b></div>
+      <div>Distance: <b id="sDist">0</b> m</div>
+      <div>Dodged: <b id="sDodge">0</b></div>
+      <div>Level: <b id="sLevel">1</b></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div>
+      <h2>Contamination</h2>
+      <div id="contamList"><div class="empty-note">No contamination &mdash; stay clean!</div></div>
+    </div>
+    <div>
+      <h2>Inventory</h2>
+      <div class="inv-grid">
+        <div class="inv-btn" onclick="useItem('shield')"><b style="color:#78909c">S</b> Shield <span class="cnt" id="iShield">0</span></div>
+        <div class="inv-btn" onclick="useItem('elim')"><b style="color:#66bb6a">E</b> Elim <span class="cnt" id="iElim">0</span></div>
+        <div class="inv-btn" onclick="useItem('ppe')"><b style="color:#7e57c2">P</b> PPE <span class="cnt" id="iPPE">0</span></div>
+      </div>
+      <div style="font-size:10px;color:#aaa;margin-top:3px">Click items or press S / E / P</div>
+    </div>
+    <div>
+      <h2>Active Effects</h2>
+      <div class="effects-line" id="effectsLine">None</div>
+    </div>
+    <div>
+      <h2>Source Guide</h2>
+      <div class="guide">
+        <b style="color:#aaa">&#9711;</b> <b style="color:#e53935">red ring</b> = Sealed &rarr; dodge or shield<br>
+        <span style="color:#4fc3f7;font-weight:bold">X</span> X-ray Tube &nbsp;
+        <span style="color:#fff176;font-weight:bold">&gamma;</span> Co-60 / Ir-192<br>
+        <b style="color:#ffa726">&#9650;</b> <b style="color:#ff5252">triangle</b> = Unsealed &rarr; contamination!<br>
+        <span style="color:#26c6da;font-weight:bold">~</span> Liquid (Tc-99m / I-131)<br>
+        <span style="color:#ffa726;font-weight:bold">&bull;</span> Powder/spill (Cs-137 / Ra-226)<br>
+        <span style="color:#ef5350;font-weight:bold">&alpha;</span> Po-210 &mdash; <b>alpha = critical!</b><br>
+        <b style="color:#ffe082">&#9670;</b> <b style="color:#ffe082">diamond</b> = Power-up &rarr; collect!<br>
+        <span style="color:#78909c;font-weight:bold">S</span> Shield &nbsp;
+        <span style="color:#66bb6a;font-weight:bold">E</span> Eliminator &nbsp;
+        <span style="color:#7e57c2;font-weight:bold">P</span> PPE &nbsp;
+        <span style="color:#42a5f5;font-weight:bold">+</span> Dose&minus;500
+      </div>
+    </div>
+    <div>
+      <h2>Controls</h2>
+      <div class="ctrls">
+        &#x2190; &#x2192; &nbsp; Change lane<br>
+        S &nbsp; Use Shield<br>
+        E &nbsp; Use Eliminator<br>
+        P &nbsp; Use PPE<br>
+        SPACE &nbsp; Start / Restart
+      </div>
+    </div>
+    <button class="btn-start" id="btnNew">&#9654; New Game</button>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// RADIATION RUN
+// ================================================================
+var CW = 820, CH = 478;
+var VP  = {x: CW/2, y: 72};        // vanishing point
+var FLOOR_Y = CH - 48;
+var PLAYER_Y = CH - 76;
+var PLAYER_LANE_X = [CW/2 - 162, CW/2, CW/2 + 162]; // x per lane at player depth
+var DOSE_LIMIT = 5000;              // μSv
+
+// ---- Radionuclide contamination data ----
+var NUCLIDES = {
+  'Tc-99m': {col:'#26c6da', doseRate:0.9,  dur:12, sym:'Tc-99m', cls:'low'},
+  'I-131':  {col:'#9ccc65', doseRate:3.2,  dur:25, sym:'I-131',  cls:'medium'},
+  'Cs-137': {col:'#ffa726', doseRate:5.5,  dur:40, sym:'Cs-137', cls:'high'},
+  'Ra-226': {col:'#ab47bc', doseRate:7.5,  dur:50, sym:'Ra-226', cls:'high'},
+  'Po-210': {col:'#ef5350', doseRate:14.0, dur:60, sym:'Po-210', cls:'critical'}
+};
+
+// ---- Source definitions ----
+var SOURCES = [
+  {id:'xray',  sym:'&#x26A1;', col:'#4fc3f7', lbl:'X-ray Tube',     sealed:true,  dose:60,  lvl:0},
+  {id:'co60',  sym:'&#x2622;', col:'#fff176', lbl:'Co-60 Source',    sealed:true,  dose:140, lvl:1},
+  {id:'ir192', sym:'&#x2622;', col:'#ffee58', lbl:'Ir-192 Source',   sealed:true,  dose:210, lvl:2},
+  {id:'tc99m', sym:'&#x1F4A7;',col:'#26c6da', lbl:'Tc-99m Solution', sealed:false, nuc:'Tc-99m', lvl:0},
+  {id:'i131',  sym:'&#x1F4A7;',col:'#9ccc65', lbl:'I-131 Solution',  sealed:false, nuc:'I-131',  lvl:1},
+  {id:'cs137', sym:'&#x1F480;',col:'#ffa726', lbl:'Cs-137 Spill',    sealed:false, nuc:'Cs-137', lvl:2},
+  {id:'ra226', sym:'&#x1F480;',col:'#ab47bc', lbl:'Ra-226 Material', sealed:false, nuc:'Ra-226', lvl:3},
+  {id:'po210', sym:'&#x2623;', col:'#ef5350', lbl:'Po-210 Source',   sealed:false, nuc:'Po-210', lvl:3}
+];
+
+// ---- Power-up definitions ----
+var POWERUPS = [
+  {id:'shield', sym:'&#x1F6E1;', col:'#78909c', lbl:'Lead Shield',    inv:true},
+  {id:'elim',   sym:'&#x1F48A;', col:'#66bb6a', lbl:'Decontaminator', inv:true},
+  {id:'doserst',sym:'&#x1F4CA;', col:'#42a5f5', lbl:'Dose Reset',     inv:false},
+  {id:'ppe',    sym:'&#x1F97C;', col:'#7e57c2', lbl:'Full PPE (8s)',  inv:true}
+];
+
+// ---- Canvas ----
+var canvas = document.getElementById('gc');
+var ctx = canvas.getContext('2d');
+
+// ---- Game State ----
+var gameState = 'title'; // title | playing | lose
+var lastTime  = 0;
+
+var playerLane = 1;
+var playerShielded = false;
+var ppeTimer = 0;
+var inventory = {shield:0, elim:0, ppe:0};
+var contaminations = [];  // [{nuclide, doseRate, timeLeft, maxTime}]
+var totalDose = 0;
+var score = 0;
+var distance = 0;
+var dodged = 0;
+var level = 0;
+var gameTimer = 0;
+
+var objects = [];         // corridor objects
+var effects = [];         // floating text effects
+var flashAlpha = 0;
+var flashCol = '#f44336';
+
+var spawnTimer = 0;
+var spawnInterval = 1.8;
+var speed = 0.4;          // z units / second
+
+// ---- Perspective helpers ----
+// z: 0 = at horizon (far), 1 = at player level (near)
+function perspPos(lane, z) {
+  var lx = PLAYER_LANE_X[lane];
+  var sx = VP.x  + (lx   - VP.x)   * z;
+  var sy = VP.y  + (PLAYER_Y - VP.y) * z;
+  var sc = 0.12  + 0.88 * z;
+  return {x: sx, y: sy, scale: sc};
+}
+
+// ---- Draw corridor ----
+function drawCorridor() {
+  // Sky / ceiling
+  var skyG = ctx.createLinearGradient(0, 0, 0, VP.y + 40);
+  skyG.addColorStop(0, '#90a4ae');
+  skyG.addColorStop(1, '#b0bec5');
+  ctx.fillStyle = skyG;
+  ctx.fillRect(0, 0, CW, VP.y + 40);
+
+  // Floor
+  var flrG = ctx.createLinearGradient(0, VP.y + 40, 0, CH);
+  flrG.addColorStop(0, '#8d9fa8');
+  flrG.addColorStop(1, '#546e7a');
+  ctx.fillStyle = flrG;
+  ctx.fillRect(0, VP.y + 40, CW, CH - VP.y - 40);
+
+  // Left wall trapezoid
+  var lw = ctx.createLinearGradient(0, 0, VP.x, FLOOR_Y);
+  lw.addColorStop(0, '#607d8b');
+  lw.addColorStop(1, '#455a64');
+  ctx.fillStyle = lw;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(VP.x, VP.y);
+  ctx.lineTo(PLAYER_LANE_X[0] - 90, FLOOR_Y);
+  ctx.lineTo(0, FLOOR_Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Right wall trapezoid
+  var rw = ctx.createLinearGradient(CW, 0, VP.x, FLOOR_Y);
+  rw.addColorStop(0, '#607d8b');
+  rw.addColorStop(1, '#455a64');
+  ctx.fillStyle = rw;
+  ctx.beginPath();
+  ctx.moveTo(CW, 0);
+  ctx.lineTo(VP.x, VP.y);
+  ctx.lineTo(PLAYER_LANE_X[2] + 90, FLOOR_Y);
+  ctx.lineTo(CW, FLOOR_Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Floor depth lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  var depths = [0.15, 0.30, 0.45, 0.60, 0.75, 0.90];
+  for (var di = 0; di < depths.length; di++) {
+    var d = depths[di];
+    var fy = VP.y + (FLOOR_Y - VP.y) * d;
+    var lx = PLAYER_LANE_X[0] - 90 + (0 - (PLAYER_LANE_X[0] - 90)) * (1 - d);
+    var rx = PLAYER_LANE_X[2] + 90 + (CW - (PLAYER_LANE_X[2] + 90)) * (1 - d);
+    ctx.beginPath();
+    ctx.moveTo(VP.x + (lx - VP.x) * d, fy);
+    ctx.lineTo(VP.x + (rx - VP.x) * d, fy);
+    ctx.stroke();
+  }
+
+  // Lane dividers (dashed perspective lines)
+  ctx.setLineDash([5, 9]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  var midX1 = (PLAYER_LANE_X[0] + PLAYER_LANE_X[1]) / 2;
+  var midX2 = (PLAYER_LANE_X[1] + PLAYER_LANE_X[2]) / 2;
+  ctx.beginPath(); ctx.moveTo(VP.x, VP.y); ctx.lineTo(midX1, FLOOR_Y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(VP.x, VP.y); ctx.lineTo(midX2, FLOOR_Y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Radiation warning stripes on walls (diagonal yellow/black)
+  drawWarnStripes();
+}
+
+function drawWarnStripes() {
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  // Just a subtle radiation hazard pattern on the floor border
+  var stripeW = 22;
+  ctx.fillStyle = '#f9a825';
+  for (var si = -2; si < CW / stripeW + 2; si++) {
+    ctx.beginPath();
+    ctx.moveTo(si * stripeW * 2, FLOOR_Y);
+    ctx.lineTo(si * stripeW * 2 + stripeW, FLOOR_Y);
+    ctx.lineTo(si * stripeW * 2 + stripeW - 12, CH);
+    ctx.lineTo(si * stripeW * 2 - 12, CH);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---- Draw a single game object ----
+function drawObj(obj) {
+  var p = perspPos(obj.lane, obj.z);
+  var r = Math.round(22 * p.scale);
+  var x = p.x, y = p.y;
+  if (r < 2) return;
+
+  // Floor shadow
+  ctx.save();
+  ctx.globalAlpha = 0.2 * obj.z;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(x, FLOOR_Y, r * 0.9, r * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (obj.kind === 'powerup') {
+    // DIAMOND shape — bright, clearly collectible, good thing
+    var pr = r * 1.1;
+    // Outer glow
+    var pgrd = ctx.createRadialGradient(x, y, 0, x, y, pr * 2);
+    pgrd.addColorStop(0, obj.col + 'aa');
+    pgrd.addColorStop(1, 'transparent');
+    ctx.fillStyle = pgrd;
+    ctx.beginPath();
+    ctx.moveTo(x, y - pr * 2); ctx.lineTo(x + pr * 2, y);
+    ctx.lineTo(x, y + pr * 2); ctx.lineTo(x - pr * 2, y);
+    ctx.closePath(); ctx.fill();
+    // Diamond body
+    ctx.beginPath();
+    ctx.moveTo(x, y - pr); ctx.lineTo(x + pr, y);
+    ctx.lineTo(x, y + pr); ctx.lineTo(x - pr, y);
+    ctx.closePath();
+    ctx.fillStyle = obj.col;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.5, 2 * p.scale);
+    ctx.stroke();
+    // Symbol text
+    ctx.font = 'bold ' + Math.max(9, Math.round(r * 1.2)) + 'px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(obj.symText || '?', x, y + 1);
+    // Name label when near
+    if (obj.z > 0.52) {
+      ctx.font = 'bold ' + Math.max(8, Math.round(9 * p.scale)) + 'px Arial';
+      ctx.fillStyle = '#ffe082';
+      ctx.fillText(obj.lbl, x, y - pr - 6);
+    }
+
+  } else if (obj.sealed) {
+    // CIRCLE with red warning ring — sealed source, dodge it
+    // Radial glow
+    var sgrd = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.2);
+    sgrd.addColorStop(0, obj.col + '99');
+    sgrd.addColorStop(1, 'transparent');
+    ctx.fillStyle = sgrd;
+    ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+    // Red danger ring
+    ctx.beginPath(); ctx.arc(x, y, r + Math.max(3, 4 * p.scale), 0, Math.PI * 2);
+    ctx.strokeStyle = '#e53935';
+    ctx.lineWidth = Math.max(2, 3 * p.scale);
+    ctx.stroke();
+    // Body
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = obj.col;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = Math.max(1, 1.5 * p.scale);
+    ctx.stroke();
+    // Symbol text
+    ctx.font = 'bold ' + Math.max(9, Math.round(r * 1.25)) + 'px Arial';
+    ctx.fillStyle = '#111';
+    ctx.fillText(obj.symText || '?', x, y + 1);
+    // Label when near
+    if (obj.z > 0.52) {
+      ctx.font = 'bold ' + Math.max(8, Math.round(9 * p.scale)) + 'px Arial';
+      ctx.fillStyle = '#64b5f6';
+      ctx.fillText(obj.type === 'xray' ? 'SEALED/X-RAY' : 'SEALED', x, y - r - Math.max(5, 7 * p.scale) - 2);
+    }
+
+  } else {
+    // TRIANGLE — unsealed source, contamination hazard, most dangerous shape
+    var tr = r * 1.25;
+    // Pulsing glow
+    var ugrd = ctx.createRadialGradient(x, y + tr * 0.1, 0, x, y + tr * 0.1, tr * 2);
+    ugrd.addColorStop(0, obj.col + '88');
+    ugrd.addColorStop(1, 'transparent');
+    ctx.fillStyle = ugrd;
+    ctx.beginPath();
+    ctx.moveTo(x, y - tr * 2);
+    ctx.lineTo(x + tr * 1.73, y + tr);
+    ctx.lineTo(x - tr * 1.73, y + tr);
+    ctx.closePath(); ctx.fill();
+    // Triangle body
+    ctx.beginPath();
+    ctx.moveTo(x, y - tr);
+    ctx.lineTo(x + tr * 0.866, y + tr * 0.5);
+    ctx.lineTo(x - tr * 0.866, y + tr * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = obj.col;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, 2.5 * p.scale);
+    ctx.stroke();
+    // Symbol — shift down slightly to center inside triangle visually
+    ctx.font = 'bold ' + Math.max(9, Math.round(r * 1.1)) + 'px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(obj.symText || '?', x, y + tr * 0.1);
+    // Warning label when near
+    if (obj.z > 0.52) {
+      ctx.font = 'bold ' + Math.max(8, Math.round(9 * p.scale)) + 'px Arial';
+      ctx.fillStyle = '#ff5252';
+      ctx.fillText('UNSEALED!', x, y - tr - 6);
+    }
+  }
+
+  ctx.restore();
+}
+
+// ---- Draw player character ----
+function drawPlayer() {
+  var x = PLAYER_LANE_X[playerLane];
+  var y = PLAYER_Y;
+  var r = 20;
+
+  // PPE aura
+  if (ppeTimer > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.1 * Math.sin(Date.now() * 0.006);
+    ctx.fillStyle = '#7e57c2';
+    ctx.beginPath(); ctx.arc(x, y, r + 16, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Contamination rings
+  for (var ci = 0; ci < contaminations.length; ci++) {
+    var nc = NUCLIDES[contaminations[ci].nuclide];
+    var pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.004 + ci);
+    ctx.save();
+    ctx.globalAlpha = 0.4 + 0.3 * pulse;
+    ctx.strokeStyle = nc.col;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y, r + 9 + ci * 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Shield bubble
+  if (playerShielded) {
+    ctx.save();
+    ctx.globalAlpha = 0.6 + 0.2 * Math.sin(Date.now() * 0.005);
+    ctx.strokeStyle = '#78909c';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r + 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = '#78909c';
+    ctx.beginPath(); ctx.arc(x, y, r + 13, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Body
+  ctx.fillStyle = '#1a237e';
+  ctx.strokeStyle = '#283593';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // Head
+  ctx.fillStyle = '#ffd54f';
+  ctx.beginPath(); ctx.arc(x, y - r + 5, r * 0.42, 0, Math.PI * 2); ctx.fill();
+
+  // Dosimeter badge
+  ctx.fillStyle = '#f9a825';
+  ctx.fillRect(x + 7, y + 4, 8, 6);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 8, y + 5, 3, 4);
+
+  // Lane shadow line
+  ctx.save();
+  ctx.setLineDash([4, 6]);
+  ctx.strokeStyle = 'rgba(26,35,126,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x, FLOOR_Y); ctx.stroke();
+  ctx.restore();
+}
+
+// ---- Floating text effects ----
+function updateEffects(dt) {
+  var alive = [];
+  for (var i = 0; i < effects.length; i++) {
+    var ef = effects[i];
+    ef.t += dt * 1.4;
+    if (ef.t >= 1) continue;
+    alive.push(ef);
+    ctx.save();
+    ctx.globalAlpha = 1 - ef.t;
+    ctx.font = 'bold ' + Math.round(13 + ef.t * 6) + 'px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = ef.col;
+    ctx.fillText(ef.text, ef.x, ef.y - ef.t * 45);
+    ctx.restore();
+  }
+  effects = alive;
+}
+
+function addEffect(text, col) {
+  var x = PLAYER_LANE_X[playerLane];
+  effects.push({x: x, y: PLAYER_Y - 26, text: text, col: col, t: 0});
+}
+
+// ---- Screen flash ----
+function doFlash(col, alpha) {
+  flashCol = col; flashAlpha = Math.max(flashAlpha, alpha);
+}
+function drawFlash() {
+  if (flashAlpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = flashAlpha;
+  ctx.fillStyle = flashCol;
+  ctx.fillRect(0, 0, CW, CH);
+  ctx.restore();
+  flashAlpha -= 0.06;
+  if (flashAlpha < 0) flashAlpha = 0;
+}
+
+// ---- Overlays ----
+function drawTitleOverlay() {
+  ctx.fillStyle = 'rgba(0,0,10,0.62)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 48px Arial';
+  ctx.fillText('RADIATION RUN', CW/2, 128);
+
+  ctx.font = '16px Arial';
+  ctx.fillStyle = '#b0bec5';
+  ctx.fillText('Dodge radiation sources · Collect power-ups · Survive!', CW/2, 178);
+
+  // Info box
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+  ctx.lineWidth = 1;
+  var bx = CW/2 - 260, bw = 520, by = 210, bh = 150;
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeRect(bx, by, bw, bh);
+
+  ctx.font = '13px Arial'; ctx.fillStyle = '#cfd8dc';
+  var lines = [
+    '← → Move between 3 lanes     S = Shield     E = Eliminator     P = PPE',
+    'Sealed sources: dodge or shield for one-time block',
+    'Unsealed sources: cause contamination = continuous internal dose!',
+    'Collect power-ups — shields, eliminators and PPE keep you alive longer'
+  ];
+  for (var li = 0; li < lines.length; li++) {
+    ctx.fillText(lines[li], CW/2, by + 28 + li * 30);
+  }
+
+  ctx.fillStyle = '#ffd54f';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText('[ PRESS SPACE or click New Game ]', CW/2, 402);
+}
+
+function drawLoseOverlay() {
+  ctx.fillStyle = 'rgba(183,28,28,0.82)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 42px Arial';
+  ctx.fillText('RADIATION EMERGENCY!', CW/2, 148);
+
+  ctx.font = '20px Arial'; ctx.fillStyle = '#ffcdd2';
+  ctx.fillText('Dose limit of ' + DOSE_LIMIT + ' μSv exceeded — evacuation required!', CW/2, 198);
+
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Arial';
+  ctx.fillText('Score: ' + score, CW/2, 258);
+
+  ctx.font = '16px Arial'; ctx.fillStyle = '#ffcdd2';
+  ctx.fillText('Distance: ' + Math.floor(distance) + ' m   —   Sources dodged: ' + dodged, CW/2, 300);
+
+  ctx.fillStyle = '#ffd54f'; ctx.font = 'bold 17px Arial';
+  ctx.fillText('[ SPACE or New Game to try again ]', CW/2, 390);
+}
+
+// ---- HUD update ----
+function updateHUD() {
+  var pct = Math.min(100, totalDose / DOSE_LIMIT * 100);
+  document.getElementById('doseBar').style.width = pct + '%';
+  document.getElementById('doseLbl').textContent = 'DOSE: ' + Math.round(totalDose) + ' μSv';
+  document.getElementById('sScore').textContent = score;
+  document.getElementById('sDist').textContent = Math.floor(distance);
+  document.getElementById('sDodge').textContent = dodged;
+  document.getElementById('sLevel').textContent = level + 1;
+
+  // Contamination panel
+  var cl = document.getElementById('contamList');
+  if (contaminations.length === 0) {
+    cl.innerHTML = '<div class="empty-note">No contamination — stay clean!</div>';
+  } else {
+    var html = '';
+    for (var ci = 0; ci < contaminations.length; ci++) {
+      var c = contaminations[ci];
+      var nc = NUCLIDES[c.nuclide];
+      var pLeft = c.timeLeft / c.maxTime;
+      html += '<div class="contam-item' + (nc.cls === 'critical' ? ' crit' : '') + '">';
+      html += '<b>' + nc.sym + '</b>' + (nc.cls === 'critical' ? ' ⚠ ALPHA!' : '');
+      html += '<br>' + c.doseRate.toFixed(1) + ' μSv/s · ' + Math.ceil(c.timeLeft) + 's left';
+      html += '<div class="cbar-outer"><div class="cbar-inner" style="width:' + Math.round(pLeft*100) + '%;background:' + nc.col + '"></div></div>';
+      html += '</div>';
+    }
+    cl.innerHTML = html;
+  }
+
+  // Active effects
+  var ef = [];
+  if (playerShielded) ef.push('<span style="color:#546e7a">[S] Shielded</span>');
+  if (ppeTimer > 0)   ef.push('<span style="color:#7b1fa2">[PPE] ' + Math.ceil(ppeTimer) + 's</span>');
+  document.getElementById('effectsLine').innerHTML = ef.length ? ef.join(' &nbsp; ') : 'None';
+
+  // Inventory counts
+  document.getElementById('iShield').textContent = inventory.shield;
+  document.getElementById('iElim').textContent   = inventory.elim;
+  document.getElementById('iPPE').textContent    = inventory.ppe;
+}
+
+// ---- Use inventory item ----
+function useItem(id) {
+  if (gameState !== 'playing') return;
+  if (id === 'shield' && inventory.shield > 0) {
+    inventory.shield--;
+    playerShielded = true;
+    addEffect('Shielded!', '#78909c');
+  } else if (id === 'elim' && inventory.elim > 0) {
+    inventory.elim--;
+    contaminations = [];
+    addEffect('Decontaminated!', '#43a047');
+  } else if (id === 'ppe' && inventory.ppe > 0) {
+    inventory.ppe--;
+    ppeTimer = 8;
+    addEffect('PPE Active!', '#7b1fa2');
+  }
+}
+
+// ---- Spawn new object ----
+function spawnObject() {
+  var lane = Math.floor(Math.random() * 3);
+  if (Math.random() < 0.22) {
+    // Power-up
+    var pt = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+    objects.push({kind:'powerup', type:pt.id, col:pt.col, lbl:pt.lbl, inv:pt.inv,
+                  symText: pt.id==='shield'?'S': pt.id==='elim'?'E': pt.id==='ppe'?'P':'+',
+                  lane: lane, z: 0.02});
+  } else {
+    // Source — pick based on current level
+    var pool = [];
+    for (var si = 0; si < SOURCES.length; si++) {
+      if (SOURCES[si].lvl <= Math.min(level, 3)) pool.push(SOURCES[si]);
+    }
+    var src = pool[Math.floor(Math.random() * pool.length)];
+    objects.push({kind:'source', type:src.id, col:src.col, lbl:src.lbl,
+                  sealed:src.sealed, dose:src.dose||0, nuc:src.nuc||null,
+                  symText: src.sealed ? (src.id==='xray'?'X':'γ') :
+                           (src.nuc && src.nuc.indexOf('Po') >= 0 ? 'α' :
+                            (src.id === 'tc99m' || src.id === 'i131' ? '~' : '•')),
+                  lane: lane, z: 0.02});
+  }
+}
+
+// ---- Collision detection ----
+function checkCollisions() {
+  var toRemove = [];
+  for (var i = 0; i < objects.length; i++) {
+    var obj = objects[i];
+    // Collision zone: same lane, z between 0.84 and 1.02
+    if (obj.lane !== playerLane || obj.z < 0.84 || obj.z > 1.02) continue;
+    toRemove.push(i);
+
+    if (obj.kind === 'powerup') {
+      // Collect power-up
+      if (obj.inv) {
+        inventory[obj.type]++;
+        addEffect(obj.lbl + ' +1', '#2e7d32');
+      } else {
+        // Immediate effect (dose reset)
+        totalDose = Math.max(0, totalDose - 500);
+        addEffect('-500 μSv!', '#1565c0');
+      }
+      score += 40;
+    } else {
+      // Source hit
+      var ppeMult = ppeTimer > 0 ? 0.4 : 1.0;
+      if (obj.sealed) {
+        if (playerShielded) {
+          playerShielded = false;
+          addEffect('BLOCKED!', '#78909c');
+          doFlash('#78909c', 0.18);
+        } else {
+          var d = Math.round(obj.dose * ppeMult);
+          totalDose += d;
+          addEffect('-' + d + ' μSv!', '#e53935');
+          doFlash('#e53935', 0.32);
+        }
+      } else {
+        // Unsealed source → contamination
+        var nc2 = NUCLIDES[obj.nuc];
+        var dr = nc2.doseRate * ppeMult;
+        var existing = false;
+        for (var ci = 0; ci < contaminations.length; ci++) {
+          if (contaminations[ci].nuclide === obj.nuc) {
+            contaminations[ci].timeLeft = nc2.dur; // refresh duration
+            existing = true; break;
+          }
+        }
+        if (!existing) {
+          contaminations.push({nuclide:obj.nuc, doseRate:dr, timeLeft:nc2.dur, maxTime:nc2.dur});
+        }
+        addEffect('CONTAMINATED! ' + obj.nuc, '#d84315');
+        doFlash('#ff6d00', 0.3);
+      }
+    }
+  }
+  // Remove hit/collected in reverse order
+  for (var ri = toRemove.length - 1; ri >= 0; ri--) {
+    objects.splice(toRemove[ri], 1);
+  }
+}
+
+// ---- Main game loop ----
+function gameLoop(ts) {
+  if (gameState !== 'playing') return;
+  var dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  gameTimer += dt;
+
+  // Level and difficulty progression
+  level  = Math.floor(gameTimer / 22);
+  speed  = 0.38 + level * 0.035 + gameTimer * 0.0006;
+  if (gameTimer > 4) spawnInterval = Math.max(0.65, 1.8 - gameTimer * 0.011);
+
+  // Tick contaminations
+  var liveContam = [];
+  for (var ci = 0; ci < contaminations.length; ci++) {
+    var c = contaminations[ci];
+    c.timeLeft -= dt;
+    totalDose  += c.doseRate * dt;
+    if (c.timeLeft > 0) {
+      liveContam.push(c);
+    } else {
+      addEffect(c.nuclide + ' cleared', '#43a047');
+    }
+  }
+  contaminations = liveContam;
+
+  // PPE timer
+  if (ppeTimer > 0) { ppeTimer -= dt; if (ppeTimer < 0) ppeTimer = 0; }
+
+  // Move objects forward
+  for (var oi = 0; oi < objects.length; oi++) { objects[oi].z += speed * dt; }
+
+  // Remove passed objects + tally dodged sources
+  var alive = [];
+  for (var oi2 = 0; oi2 < objects.length; oi2++) {
+    var o = objects[oi2];
+    if (o.z > 1.08) {
+      if (o.kind === 'source') { dodged++; score += 18; }
+    } else { alive.push(o); }
+  }
+  objects = alive;
+
+  // Collision check
+  checkCollisions();
+
+  // Spawn timer
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) { spawnObject(); spawnTimer = spawnInterval * (0.8 + Math.random() * 0.4); }
+
+  // Score and distance
+  distance += speed * 10 * dt;
+  score    += Math.round(dt * 12);
+
+  // Check dose limit
+  if (totalDose >= DOSE_LIMIT) {
+    totalDose = DOSE_LIMIT;
+    gameState = 'lose';
+  }
+
+  // Render
+  renderFrame();
+  updateHUD();
+  requestAnimationFrame(gameLoop);
+}
+
+function renderFrame() {
+  ctx.clearRect(0, 0, CW, CH);
+  drawCorridor();
+
+  // Sort objects far-to-near (ascending z)
+  var sorted = objects.slice().sort(function(a,b){return a.z - b.z;});
+  for (var i = 0; i < sorted.length; i++) {
+    var o = sorted[i];
+    if (o.z > 0.04 && o.z < 1.06) drawObj(o);
+  }
+
+  drawPlayer();
+  updateEffects(0.016); // approximate dt for effects
+  drawFlash();
+
+  if (gameState === 'title') drawTitleOverlay();
+  if (gameState === 'lose')  drawLoseOverlay();
+}
+
+// ---- Input handling ----
+document.addEventListener('keydown', function(e) {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (gameState !== 'playing') { startGame(); return; }
+  }
+  if (gameState !== 'playing') return;
+  if (e.code === 'ArrowLeft'  || e.key === 'a' || e.key === 'A') {
+    e.preventDefault(); if (playerLane > 0) playerLane--;
+  }
+  if (e.code === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+    e.preventDefault(); if (playerLane < 2) playerLane++;
+  }
+  if (e.key === 's' || e.key === 'S') useItem('shield');
+  if (e.key === 'e' || e.key === 'E') useItem('elim');
+  if (e.key === 'p' || e.key === 'P') useItem('ppe');
+});
+
+document.getElementById('btnNew').addEventListener('click', startGame);
+
+// ---- Start / restart ----
+function startGame() {
+  playerLane     = 1;
+  playerShielded = false;
+  ppeTimer       = 0;
+  inventory      = {shield: 0, elim: 0, ppe: 0};
+  contaminations = [];
+  totalDose      = 0;
+  score          = 0;
+  distance       = 0;
+  dodged         = 0;
+  level          = 0;
+  gameTimer      = 0;
+  speed          = 0.38;
+  spawnTimer     = 0.6;
+  spawnInterval  = 1.8;
+  objects        = [];
+  effects        = [];
+  flashAlpha     = 0;
+
+  // Pre-spawn a few objects so they're visible immediately
+  for (var i = 0; i < 3; i++) {
+    spawnObject();
+    if (objects.length > 0) objects[objects.length-1].z = 0.05 + i * 0.2;
+  }
+
+  gameState = 'playing';
+  lastTime  = performance.now();
+  updateHUD();
+  requestAnimationFrame(gameLoop);
+}
+
+// ---- Boot ----
+gameState = 'title';
+renderFrame();
+</script>
+<!-- CTRP-THEME-START -->
+<style>
+  :root {
+    --ctrp-green:      #166534;
+    --ctrp-green-mid:  #15803d;
+    --ctrp-border:     #bbf7d0;
+    --ctrp-muted:      #64748b;
+  }
+  .ctrp-header {
+    background: white;
+    border-bottom: 2px solid var(--ctrp-green);
+    padding: 10px 22px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    flex-shrink: 0;
+  }
+  .ctrp-header img.ctrp-logo { height: 46px; width: auto; flex: 0 0 auto; }
+  .ctrp-header .ctrp-title-block { flex: 1; min-width: 0; }
+  .ctrp-header h1.ctrp-title {
+    margin: 0; color: var(--ctrp-green); font-size: 18px; font-weight: 700;
+    line-height: 1.2;
+  }
+  .ctrp-header .ctrp-subtitle { color: var(--ctrp-muted); font-size: 12px; margin-top: 2px; }
+  .ctrp-footer {
+    padding: 10px 22px; color: #888; font-size: 11px; text-align: center;
+    border-top: 1px solid var(--ctrp-border); background: white; flex-shrink: 0;
+  }
+</style>
+<script>
+(function () {
+  var LOGO = "";
+  var TITLE    = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML =
+        (LOGO ? '<img class="ctrp-logo" src="' + LOGO + '" alt="CTRP">' : '') +
+        '<div class="ctrp-title-block">' +
+          '<h1 class="ctrp-title">' + TITLE + '</h1>' +
+          (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') +
+        '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML =
+        "&copy; " + new Date().getFullYear() +
+        " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; " +
+        "Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; " +
+        "King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+</body>
+</html>

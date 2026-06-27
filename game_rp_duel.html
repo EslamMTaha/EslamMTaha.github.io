@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RP Duel — Radiation Protection Card Battle</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#11151c; font-family:Arial,sans-serif; color:#e8eef5; display:flex; flex-direction:column; min-height:100vh; }
+#arena { flex:1; display:flex; flex-direction:row; justify-content:center; gap:18px; padding:14px; }
+#board-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.side-label { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#7e8aa0; align-self:flex-start; }
+.healthbar { width:430px; height:20px; background:#222a36; border-radius:10px; overflow:hidden; position:relative; border:1px solid #313c4d; }
+.healthbar .fill { height:100%; transition:width .25s; }
+.healthbar .txt { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+.row { display:flex; gap:6px; }
+.row-lbl { width:74px; font-size:9px; color:#6b7689; display:flex; align-items:center; justify-content:flex-end; padding-right:6px; text-align:right; line-height:1.1; }
+.tile {
+  width:96px; height:62px; border-radius:7px; background:#1b2230; border:1.5px solid #2c3647;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;
+  font-size:11px; cursor:default; transition:border-color .12s, background .12s;
+}
+.tile.legal { border-color:#43a047; background:#1e2f23; cursor:pointer; box-shadow:0 0 8px rgba(67,160,71,.4); }
+.tile.legal:hover { background:#234a2c; }
+.tile .ic { font-size:20px; line-height:1; }
+.tile .nm { font-size:9.5px; margin-top:2px; color:#cfd8e6; }
+.tile .badge { position:absolute; top:3px; right:5px; font-size:9px; font-weight:700; color:#ffd54f; }
+.tile .up { position:absolute; top:3px; left:5px; font-size:10px; color:#ffca28; }
+.tile.src-a { background:#3a1d22; border-color:#a3414f; }
+.tile.src-b { background:#16314e; border-color:#3f6f9e; }
+.tile.src-g { background:#2c1d40; border-color:#7e57c2; }
+.tile.sh-l  { background:#10363a; border-color:#26a69a; }
+.tile.sh-h  { background:#2b2f36; border-color:#90a4ae; }
+.tile.reactor-tile { background:#1f3a2a; border-color:#43a047; }
+.tile.melting { background:#3a1f1f; border-color:#ff5252; animation:meltpulse .7s infinite alternate; }
+@keyframes meltpulse { from { box-shadow:0 0 4px rgba(255,82,82,.4); } to { box-shadow:0 0 14px rgba(255,82,82,.9); } }
+.tile.rso-tile { background:#2a2440; border-color:#9575cd; }
+.tile .boost { position:absolute; bottom:3px; left:5px; font-size:8px; font-weight:700; color:#69f0ae; }
+.tile.leaking { border-color:#ff7043; box-shadow:0 0 8px rgba(255,112,67,.5); }
+.tile .leak { position:absolute; bottom:3px; left:4px; font-size:8px; font-weight:700; color:#ff8a80; }
+.tile.contaminated { box-shadow:inset 0 0 0 2px #7cb342; }
+.tile .contam { position:absolute; bottom:3px; right:5px; font-size:12px; color:#aed581; }
+.tile.ppe-tile { box-shadow:inset 0 0 0 2px #4fc3f7; }
+.tile .ppe-m { position:absolute; top:3px; right:5px; font-size:11px; }
+.center-line { width:430px; height:2px; background:linear-gradient(90deg,transparent,#3a4a5e,transparent); margin:3px 0; }
+#side { width:280px; display:flex; flex-direction:column; gap:10px; }
+.panel { background:#1a212c; border:1px solid #2a3342; border-radius:8px; padding:11px; }
+.panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#8aa0bf; margin-bottom:7px; border-bottom:1px solid #2a3342; padding-bottom:4px; }
+#turn-info { font-size:13px; font-weight:700; text-align:center; color:#ffd54f; }
+#log { font-size:11px; line-height:1.55; color:#aeb9c9; height:130px; overflow-y:auto; }
+#log .hit { color:#ff8a80; } #log .blk { color:#69f0ae; } #log .sys { color:#8aa0bf; }
+#hand { display:flex; flex-wrap:wrap; gap:7px; min-height:96px; }
+.card {
+  width:78px; height:96px; border-radius:8px; background:#222b3a; border:2px solid #36425a;
+  padding:6px 4px; cursor:pointer; display:flex; flex-direction:column; align-items:center; text-align:center;
+  transition:transform .1s, border-color .12s; position:relative;
+}
+.card:hover { transform:translateY(-5px); }
+.card.sel { border-color:#ffd54f; box-shadow:0 0 12px rgba(255,213,79,.5); transform:translateY(-5px); }
+.card .cic { font-size:24px; margin-top:4px; }
+.card .cnm { font-size:9px; font-weight:700; margin-top:3px; line-height:1.1; }
+.card .cst { font-size:8px; color:#9fb0c7; margin-top:auto; line-height:1.3; }
+.btn { width:100%; padding:9px; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-go { background:#1a237e; color:#fff; } .btn-go:hover { background:#283593; }
+.btn-pass { background:#37424f; color:#cfd8e6; } .btn-pass:hover { background:#46535f; }
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.78); display:none; align-items:center; justify-content:center; z-index:99; padding:18px; }
+.overlay.show { display:flex; }
+.ov-box { background:#1a212c; border:1px solid #2a3342; border-radius:12px; padding:26px 30px; max-width:560px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+.ov-box h2 { color:#ffd54f; font-size:24px; margin-bottom:10px; text-align:center; }
+.ov-box p, .ov-box li { color:#c4cedd; font-size:13px; line-height:1.55; }
+.ov-box ul { margin:8px 0 8px 18px; }
+.ov-box .combo { background:#141a23; border-radius:7px; padding:9px 12px; margin:8px 0; font-size:12.5px; }
+.ov-box button { display:block; width:100%; margin-top:14px; padding:12px; background:#1a237e; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; }
+.ov-box button:hover { background:#283593; }
+</style>
+</head>
+<body>
+
+<div id="arena">
+  <div id="board-wrap">
+    <div class="healthbar" id="ai-hb"><div class="fill" style="background:#c62828;width:100%"></div><div class="txt" id="ai-hp"></div></div>
+    <div class="side-label">Opponent</div>
+    <div id="ai-board"></div>
+    <div class="center-line"></div>
+    <div id="pl-board"></div>
+    <div class="side-label">You</div>
+    <div class="healthbar" id="pl-hb"><div class="fill" style="background:#43a047;width:100%"></div><div class="txt" id="pl-hp"></div></div>
+  </div>
+
+  <div id="side">
+    <div class="panel"><div id="turn-info">Your Turn</div></div>
+    <div class="panel">
+      <h3>Your Hand</h3>
+      <div id="hand"></div>
+    </div>
+    <div class="panel">
+      <button class="btn btn-go" id="self-play" style="display:none;margin-bottom:6px">Play</button>
+      <button class="btn btn-pass" id="pass-btn">Pass / End Turn</button>
+    </div>
+    <div class="panel">
+      <h3>Battle Log</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay show" id="intro">
+  <div class="ov-box">
+    <h2>RP Duel</h2>
+    <p>A radiation-protection card duel. Reduce your opponent's <b>dose-limit health</b> to 0 before they drain yours.</p>
+    <ul>
+      <li><b>Sources</b> (α, β, γ) go on your <b>Offensive line</b>. Each of your turns they fire down their column at the opponent until they <b>decay</b> (half-life timer).</li>
+      <li><b>Shields</b> go on your two <b>Defensive lines</b> and protect <i>you</i> from the opponent's sources. The <b>Front line faces the enemy</b>.</li>
+      <li><b>One card per turn.</b></li>
+      <li><b>Specialists:</b> the <b>RSO</b> (on a shield line) boosts adjacent shields; the <b>Reactor</b> (on your offensive line) gives a bonus card every 2 turns — but it costs you an attack slot.</li>
+      <li><b>Inverse-Square (Distance):</b> halves the next volley you take — the time-distance-shielding trio.</li>
+      <li><b>Hazards:</b> <b>Sabotage</b> makes an enemy source leak (hurts them, nicks you); <b>Criticality</b> hits an enemy Reactor and starts a meltdown countdown; <b>Unsealed Source</b> contaminates a tile. Answer them with <b>Waste Disposal</b>, <b>Decontamination</b>, and <b>Emergency Plan</b>.</li>
+      <li><b>Utility:</b> <b>Crack</b> degrades an enemy shield (High-Z → Low-Z, Low-Z → destroyed); <b>Survey Meter</b> reveals an enemy hand card; <b>PPE</b> shields one of your units from contamination (and keeps a contaminated RSO working).</li>
+    </ul>
+    <div class="combo"><b>α Alpha</b> — stopped completely by <b>any single shield</b>.</div>
+    <div class="combo"><b>β Beta</b> — needs <b>Low-Z (front) + High-Z (back)</b>. Low-Z alone helps a lot; High-Z alone barely (it makes bremsstrahlung!).</div>
+    <div class="combo"><b>γ Gamma</b> — needs <b>High-Z + High-Z</b>. Dense material only; Low-Z is nearly useless.</div>
+    <button id="intro-btn">Start Battle</button>
+  </div>
+</div>
+
+<div class="overlay" id="end">
+  <div class="ov-box" style="text-align:center">
+    <h2 id="end-title">Victory!</h2>
+    <p id="end-msg"></p>
+    <button id="end-btn">Play Again</button>
+  </div>
+</div>
+
+<!-- CTRP-THEME-START -->
+<style>
+  :root {
+    --ctrp-green:      #166534;
+    --ctrp-green-mid:  #15803d;
+    --ctrp-border:     #bbf7d0;
+    --ctrp-muted:      #64748b;
+  }
+  .ctrp-header {
+    background: white;
+    border-bottom: 2px solid var(--ctrp-green);
+    padding: 10px 22px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    flex-shrink: 0;
+  }
+  .ctrp-header img.ctrp-logo { height: 46px; width: auto; flex: 0 0 auto; }
+  .ctrp-header .ctrp-title-block { flex: 1; min-width: 0; }
+  .ctrp-header h1.ctrp-title {
+    margin: 0; color: var(--ctrp-green); font-size: 18px; font-weight: 700;
+    line-height: 1.2;
+  }
+  .ctrp-header .ctrp-subtitle { color: var(--ctrp-muted); font-size: 12px; margin-top: 2px; }
+  .ctrp-footer {
+    padding: 10px 22px; color: #888; font-size: 11px; text-align: center;
+    border-top: 1px solid var(--ctrp-border); background: white; flex-shrink: 0;
+  }
+</style>
+<script>
+(function () {
+  var LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGMAAAB4CAYAAADmKkzNAAA4DklEQVR42pWdd7gkZ3Xmf+erqu6++d7R5NEkjTTSSBohCQWQwCAhECxBAtYgYGExBoNtDHjB8Hi9C3gN2GsbMGsbsI2NDfbuagkiRxMFWCiA0kij0Whynrn53o5V39k/qrq7wlc98tUzj+7trviFE97znnMksh1FBRFBVen/CAiQ/kyA9CHOH00OdP2tqeu6/i65R+l98/d6ss806LP0TV33Tp0nCiqpz8qeR3NjKr1fQVFArSKRDbV7oPw7Xqn/e/9pleK40p1PGfy4+XvogLvn7yipe5B7xic9eQoixeN0wPfpo9Qxgpn1lTq/e6wIqFpU4/MNSHyjs64ucf6uqVtK2TnSH8b0QGtuwJTsZpTMnfITIQim/233Hup+4vhzcb6FkB5o0GSgu8d3B859Zny8OD7LPLe4lkPqYVX7b6MDJkA1O+j5o1XJrNWyqdPeVaRwjJY+h/QmRTJ/a+qZus8IIo5XTY1Ab1Wm76luQaW9d9LMMemnzS+s/rGa2VuafydJT1j8Y3qHqQ4WTOoWQVIYOMms4azKkeSJtTe8ebWUfrvuIuieEv/T3sCnj8sMYX53pJdlemGltqZLTYkWRyN+FslOtEv4aV7kSmoZlGipKAq1e0Z/VYlDgkuZNKTkcRzHuvehOsRRUZlqyffSX0xyNvGqZ7EKZMCza28/Sm+hCSLZa+a1iVNPCalr2GSRWfxYibgErAwUYIO/07MMSH4/acn3klPblFhlOaFfqvYk92iD3tFtjqR1g+uWUrII09ZqmZo36lhR6lQxZ7NpteQYccpgMv/EoV2yqpTMmKfEjuu+4hQuDlHsMiHOtrP0LDvNLUVUtWTJSkpn5HarlipVcZt9IgW7p78XxTnFbiM6+yCSsac09VJlg1XyEhn1L2exFsXx5uq+l6TeXaRk4coA8Z6/m+I7tkVPDkphoLKnS7Lt8w6j9kzNRMZKahClq7TLRZcmZ+YHInudtNxNW9HFZ1Wn5FGH+d390qR8B1K6ovvcmhGVkvo+vYXFtUAdu0eSd/ZTJkfXFC9ZeZJ64NwOypkvmYcQtzcvEr9Ad+YkrSNcDyLleje+VnbQBklTkaJDx4C92rWD4kfVgpYroBaZ3a+pxUXu99ypkQ01OyDkfFsGK84n4+GKcyGm5sZ13awl19O9ylksuPSKTYlY1ScBsWhGMavboOoNtksPZJCS3CNKziiJF6PtXccUXZy+fI1tes1rz3JdLiWDkzYSnLpU+ob5AC+3/71kxYvLO+5eTrM30zxOlH9+SV0/56+IpCEeLVddSgaXkPy2zoyr9K5n0leQnLIVkWRL98EBcQy4SHJscWRSo1V8eckcLm7gRXA6pd3nkBJ/VUoMi57eVR1gIGphsHWQWJP+2EiJiS2ulye7vkx/L4kDBtG+zEvdJH8/1dSqc6wYKfHwy1wETW9CdQ1Hf7C0ZEBVYxHgmiQdLO6L1xww8ZIzJLTEfFYnrNIXWgL43Tv0QTctgFuSti0ySpgMdpUXw5lVIppRDdk9mMVaur6ESPrhZQC0OBjcLPh6Tl9QiiijZneuOn0eN9bclyi5VSVpx0CS+8ZeuOliNxnQrYcISWZVdC/YFy99O7u3DUV6YisjpTWDRmWNOk1Za1IE3Mr8gayk0RIVlvOSVLOKWByWvxSR3LyokZ4FKo6JKHdjpOB/pJy+IgCeVjnqwJr7D+FGaDXnNkkfrBMXEtW1fNSpT8/m2Qou5ZxWsnmPRTK6Qx3ul2SgdCn6T9LHBqREB2pB3BehknjJ297Jpm95aDm4p1no2Q196EBwTsgDalICuEgKJE92mJQcK1mbU1yiTFLmTWH15OGZvPmpOW9Bc6hAScghHzcRyUxwcY/H35v+A5ds99JAQ//Fu5Eqt+0vGV9WCxgVOWBQ+4aAxqgmGdiFzJSdFTNTSUKjLrXqUsyS+6YMUeoiCf3314x0yE+05CZbCzEjv7fE5GzYjXuwVV17Qfu2tjgC3GldIFnEX9XtM5TtWh1sGA8AlbUnp9QZTNW+n4JrR2WdPsGh6DODo+5gRwrr8geJmczxBWd8AEyuueNEMpNUsOkL4TZNiSAXKpALV4ohsjax8x3utaYstpSA0AHhZrfxUPKd5PROBofLLsQMhpe7jpGM11m+xrLvn8Oi0pZTfiWlsaq8OJc87KIDYxP5F0MEYzw6nRDP8xyeeEq+u1AadYxpCczRs560XFNoIcqY1TE6MMyjGC0NrKjTkco/aFETnGUmxRWeVAeE7fYs+45ofNhP9n+HD9/1bv710a87bLlBMHlyFcneQkvjMkWHLr0TdaBexXGeZMCrmF6hLoTdhWgkF5CScAVZWEdSb5iFh7TcSDhblC7lQRsxNFot7jzyTU7bfXxt1x10whAjUgwqlb1W2snI84pyz+ryvCkxW8pgnv6YJeZD7rlMFqPTAeHIND5VYmeoY1KdWFUsI7R0J4rj3ln3PbQdhms1dkxexf598+xc+TQqQUA7bBcAT+fKyQOZLk+/O6puaC1rHGtxErIRTXewWTM6w7khUt63MAADSnugUvS6B0qJPApbavakniU2dY0YfBMwvXwSO3GaDetWcHzpCMfmj1PxqxiEyEZpt7+c/tEbQT17RLlgdKZcZSmaJYJbF2tKNEna6+8zCtMMpbIXkIJBqTk3J+9xaIFIom6wKGHX9YM/xeiKEltOYdTm7hPf54H6d9HRJc4cVH7xy8MMVya4defLuOWKl1ANalgbIcY4xGF/TRoxuTiJlEZ0+/pBHQGo7ELMRhyLu75P2OvHM3qTIfkl5BiwAviVsrd7odeBpJJyzqvktqhqNg7SHbgHjv2cb+y9ndPtY1greBrwyCOzzM2GDA0ZLCGbp87l1de9ipsvuwmrNsdFzCLQ8bOnzcxynnAWHpe+SZ4xYXPOZIkl2Jc0qcmwNkwgHMmZmDIgdpQ2ZfNxJ1eg6GwIa/yipw/fhw3rTKy+mOrwOb2Xt4lo+vsffIpv7Po8kRcyNj7ExOgY41Meex+f4YknGgxVaiw3G7RabRqh5fXPeAXve+XvElmLl9oh7dYCi9N7iCLLqnOvKu4GHfzc2agjbvGsJWHogonb59r66oB1n4wHrq54tkO59Elf2RhJhnek8VHN+jSnn/gJM8f3MDx5LsPjKxgeX0+ltgIJhrj2vKdzsHMfQ6M+z9xyM4/O3ANGue2Ct/GFf/s6ZxZP89ydz+Erv/w6i/UmL77qOahabNik2ZihsXCUxbljLC+cpjl/kMn1O1m54WrQCMRkVId2xaVK4pBIub+bNs2dpn8xjNuLw2t/8frdC6hokbyr/a2ZFiNOp6gs4pb726RleO6gjRfezMYLbwag1Zqj01pAxBCGDcTApZsv4Z8e7vD8jS/nuvU3cd/+e7lg5Q4uW3c1+zed4rsPfo9br3wZ61ds5M++8hdcue0yorBBp72MqqU6upKRFVupDq/ESPo5fKcUsIlXP9jAkIHjko13l4N+0mOHlIgTKYtpy1md5SKGpBZjPPbe/zlO7Pkh1aFRrLWxeFTF8zyC4bUEwyuoVqtURyYZmdpKpTaJiJ942i00kkTpxv8FZihBPBSSzz0JiNTQaNep+RWM54PW6LTazB7fRWt5hk6rTmt5ltbScSIb9owTEUOntcQ5m6/hwqtfFxsBYkp9HykQKlJYmxRCaAPNd7/oFInTidRMHkSfY+oSbL3IWQb6MKgqa7c+jcmV2zBekDL/4v/7tQmCyiiITa4cJDI26tp+tDodxoMpwjCk2Wpw37E72XXgce7atYvxsXHanTZDwRBh2ElIMRGKxXgewfA4K0YujX1dVcLWMu3WfF8kdYcl6lAZnkLVZh1DdcVainLIFUZ2L+6s0eS7mRjaC/qkUUfVfLRKcwBgjlPksOpGJzYyOrHRudAa9RMsnN5Du90GBM/3GRpdTXV4MtmRPhpW+Nwv/zeWFqeWjlOpwr7D93P8VMhofYQ3/OPvMOwHBHjJio51VGP5DI2FU0TtFqBUh0YZXbmFFVOXlbsXah0xHU0io0WTPp8Mk6G4S9pFpBh7Ee1Ohg7iMbjZE4Xx7voPfWJangMlvRfMytBuJPDonh+yPHeA1ZuuZ3RqK7WRKbyghkgMFERhyNxCncdO7mJyeAQNPax6LJw01JcsodaZb+2h3lpg4/Dm2C8xNWpDVWq1FYxObKS5PM3y3GHOHLmb2TN7uOCpr+2bp5qG9KVg3kspoVvLDPbcTpEBYWJJTNtcHK8MsOtaTVJCW+n6IWkcqoDKOrhX3XQqEa8EnIvPszbiy/d8mW/e92OW63XGRsdYdc4E2vE5eXqJeqtOyzapBQEvvOYGXnn9LRjxejvdpQNjEWgyPkef7ViSTpC4AZkFJcXUiezuyTMK0ykB8Zj56gyQK2VE4QJVtWxbO3eZOG14Texrqzah1wh5yr21FiMeT9t+NY/P3UfdCqFXpzIyz8EjdfYtRoxXqwxVq1SCCtdsuzyJc4R4Jp5ktbawr7MUpFRQKZWD0V/dKR9KNGejFE16MmGZVIwv4TNn4xkpMSVaNI2KwSUti7T8OyKF+Rukos2q/d2hWXqnSVDjx48f4DsP/YxzaitZXmgDSkeq1DvC/PwZoqjFTLjIq88c5/z12/BM37vuDrZgsvI8F3jqc9yKwaFiYEhyK1/zfKWsH15wx9IKvEuHcvgZrlSVYsqXFPOtBnivPdc/RzSQPkCV49AIWGWxMU/HtrG0uW7bs1g/tRLrhUSVZRrLEa1FQxRCGCrLnTYiISfmjhN4ASuGp8Cks47yu1vBKsZ4WLUZIM9FhnCHYs8WDnDzrjSVutxPI8sDhc6trCXeZxEikUI4MqcDuhcypp+amzHO+0DeHbs/zQNzPyKoGPyaYXR0CN/38T0Br8ND957g2MEGUyuH8IyHWlhcaGDEx6sIz77gJl539ZtiWERMhouRHtRIQzzxk1ey2IF7XRy6QgupD1l0Sgv+WTeFTFUTRmGBXPIkeQmqpXolT4exiRUlxKHSQkhBLFYVtVHPivE9n4cOPszt//ZFahUfo0IQGFTnYtPXEyqB8PjuOocOhwyvABGL7YSIgucbhkfhUwdu59Kpa3nq+VcQRW1CIhrapE2Htm1jPUNj1w84dvcXWfWUF7PhipcyTJWqqYCRBGw0OWC0rwIlRbYUGUxdSiO/afNW0n6GlvIt0haRpHhIkjsmZSWkyGqWeDV60nf2l5dO8ehPP8XYis1svvwWPBMQeNXkvOxETYxMMHcUKtWIShU8X4nnUgltRFCFpt8irEbU681kkjzEGKK2Mn9CqfkV7IhwoHOQ+XCBtokdQQ/BMwFqI47c9U/4pw+y975Z5neeT80bZagzzAazlolgLIfFkdE55WmFOZaJ4DCF+76HXy7hszxRJcU0J2/1ZdONe6xDtXji0Qlb7D5zL0/MPsKB5mFGdt3HhkMHOBlU+MqxrzM3sYJhAqpmmFXD6zhv6mIuXHUxK0ZWsGnlRl70lFv57M8/z/rJlZiWhwmqgMeIDRgKq6w+Z4SLJiMW5ueot5tEJiLSDh0NOT4zw3+4+ka2r9sGKOuC1dgoJJAKvlR6PtHQU27jwD3/mwuvvI3h4DyORgdoBMvMhjNsbW9hfbAWi82J0ny0QRxhpWSRplBtKUStNB9ckhJuSA5h7e0f67DDs1aFEY+HTtzNd/ffzhPzDxPZiAvXXMvljUk6996BjJzD5ue/m2h4knp7jrnlOZYadY7NHWfvyUeoehUuXncZ21dfwpHpk+B3UNMhMm2MF+FVwdTazBxvsHBCMZ4higSDj28C/KBCx4ZcsG4rq0dX4RufSsVn29rz4x2hXZEY68V2e55KZQJQ5jrz7OcQLb+BdoRLzEWMe2N9JZzzl/JmsTvrVXO8EU0Fl3RApK+EE9ALIGlRMUuKH2XE8KN9X+NLe/8OlZALJ67hpvNexgXn7ASB6ZO7qdbGGZ1Yn7nOcnORzz74MfbOP0gzquMFwnCtxnCtQqhhjFuJIgZMRagO+Rx4dJ4DDy8TBD5ikzxDIxjPIMbQsRFhJ0Qjwa8KOzZcxDtu+n3WTa3D2vhZYyDTYG0U50qIz3xnnj3spe01WRWtYru/vb87cplWIuIg2Gkuv74Ylu0zbhS/vGjKgPi04pgIejvGiMeh2b18Zc+nCaXNZVPP4NeufA++52NthFrlnDUXAcSIaSoX7+P/9iEemb+LVaOrGKkO4/mxtdVuR3jGwxgfMbFF5EXgRz5DEjEeBPgVk9gUMZ1YVbHWUlGPil9BAqE6HPDIiYf45I/+mvff8oE+UCkSV7YRkzigERP+OCPtEZqmQYMmVqMM3tVbkOKI+5ckjmghFtgPMPl98E+K9EZ1pGiJFjEnKVJEfrz/6zTDJc6pbuCVl74F3/MJbQcjHoJgoxi2jlcleMZjubHI8YVD1LwxOh2Lr4JqhBjwjEE9i+dpTGkRL757qISdiDCK0Mj29FsPglMlJnoL4kMnjKjIKE8c28dyc5mxobF+3ELyYkUYYii5pu3lwVqKWbWaguaeDO9Keyw627uO359VceZO5EOu4iD9p/WLEYO1IftOPUGz3eayjdcxPnQOoe3a8MnZYjL+S9f8jRELxVolisBL7EfbKx7SrQIUoXjYSImieAcYNRmer1rpKWgVQS3YdkQn7DBcJZXZVE5RMiJJsM8UEpIzelYoZSG6QOxsmFpSHnhvlrIguAiFIImqAzxMI8UidMIOrbBFqwVrRzf3WOWauq6UiD8FrI1xpCh5BaOCaLIbrBB12Xcaob7BRhGRVYz2U7kEE4OLKdPPJlaftfHkFG3RPOKg1LWOoAwzhOBhNco6U2VUJhfBort1SibOT5+kGdxGzq47UohInIqWAF7GJwgqMRkZ08+4kPKgZG+yJRYIYaR4qQXrqUejXcf4HrWgShQJai2eF0MKViGKuvrLo9FpEVlluDZERJiMQfx+kUKUCUgXwwMCdKIW87KAAhNM5FLLJLt0pXi5NPzSQ7wH8MMNBYy1LG+NLClM8uadJIpP8byAiWAVHQ2ZbZ4ZANnk5K4kIgeIBEIbiyusMN+cY+3QFlZXz6XVaUMi0mykRFaJgMgq1grL7RbnrtjCttUXcGZpDhUTT5j1iKxHpB5RlGcy5ot1GWb8FlFFqEQ1pryJ2JwXVwatZAiI3QXuwKwz+kgK9aZyRfHUSUF0pZi5KTldJXX+qosI28LjJ/f0ZG9xhrNLyYhBI8GGAlawGEKrLDQWuGHzrbzzug/zqzveTLvdTHRFPAFhaOmESqRCx0K90eJ3bv5t/vLXPsavXvNyZpeWsVaILETWEtoo1kGFmiLSC7UuLR7lwe/9KY0Du9jin0cg1T4SkV+MjhVfDp06uMDJ5UweQxIXH1IVdwqTFFkOyVNdee61jJgV7D7xEGeWTmKMly26BblgC5wJpwltiIYxe8ZYod5q8PKL38grL/stjPE4b8UlXLv2udRby2Ah7FhCC+3QEkUwW1/keZc9j6dsvgwj8I7nv53fvunNLCwvIjbJhEpse6vqJKIKwiPf+3Nad38B+63/x2TbT1laWhiKbMqxlGRVFXMP8ymtppxYmgVe1E2YLQSlBINVy4apTVy54WoOzRzirn0/7gePcncyApaIPZ291LVJVapoGEEkLDUXuWnrS3jBRa8ktJ3kpQ0v2v56hmWKZqeFDROlLUKj0WRFdZLfeu5v9OIRYRTymutu45YrX8yZxQVEvHg3RSFDlVpsZlvbHxDxWKLJ3LCHRRgZW4Enfo96ms+mUqtOskE2WzdrGEghhSD+1OTBLgoMbgcDqxS7T/OHhBfvfDnDwSjf3/MtlluLcQhU++UajBjqts6DrccYk1G2+hsThFRothqsGdrAr17+az3U1CSh14nhFVy/8WaWm3VQod22YDzmmkv8x2texqqJVXGELzGfrY347ZvfzIaVG1huN/DwWWw3+Nvv/wPLrWV8zyeyEUaE0HbYHT5G5YYXc/5L/oQrX/xn+NXRLFOklxjjFk+aYrXn0+J6HneBlKOYYrUSOUt9NR1A3+zL/shGbF97MTdffCu7ju3iK/d/PvZB1PbiFDPRDI+29rLF28A6fy1t2yFshyiGZtTixgteRC0Ywdo476JLqbEa8sKLXsX5k5fQareQjsdyo8EV513BG256LZHt9GB6QYisZbQ2xiuvfRmLy3U6UcSK0RU8ZdNO/vJbf8mRmaP4XkAUReyN9tOQZdbrBi6+5FaGxteh1ua4U7GpnTWCc5UgcsrcWQJDMjGElJgayILIzb5rIiSdqdqvOvOKp76G9RMX8M93/QuPHnsI3wswGE5FpzjQPsKOygVM+SuSLCJDJ4Jmu83k0Equ2fwr/TCp9uWwEZ8Hj/2CQ2eOsdiosxAtslRvcOTEUX66594EFre9tzEmdgafddF1jA9N0rKWpXqd67dfx23XvZK//+E/suvQLg7YQxw0R1gRrWCbtxUbhVgbZkVQOnsrB6W7bP6yEhiuHBfjCswX8+C0H8rVorImn28g3RVsmRye4s3PeDPzzTof/8EnaLWanLSnONo+zs7qDoa9YSINU4VQoNlpc87QOqZGVhBGIYoSaUSoEQocmz/A39z9IeYap7l29Qt413P+K7c+9QUcmj/N7/2fP2T/qQMo0AlDrI2w1hJFIWsm17B19WbqrSaEwszyLFtWbeW3bnwTP5n+GSeD05wr6znfbImJ0saksKgBVdWETGGy0syl9I5xmNMmO8OaLVXRO1kKMHo6HarMkTASJ608bdsz+PVnvIFfHrqXLz/2RcQ3XBxsJ5AYOMwHsjpRh/HKGJ7x8b0g+ecTeAGe8bj7wJ0cnjnCS3e+hjdd/y6es+O5/Onr3sern/GrPH5kH9+5/4f4nk8lqOD7PoEf9K6zdnQNreUmKlBLcjgWRha56oqrOLz/CHICqn6N0HZSHIUs1SgrfnCXP8xBRtkSHzjYON2wa5cJkSFca69md9F1lxS0IQOKcsWsDquWX7v+jQRDAQ9O76Lyi2FuvfJWOlEbz/iI9mMgUWTx8ZldmuXO3d8notMD8axGVPwaDx19AC+qsXPtNUQ2ot5eZigY4TkXXcenvvVp7tp7L+um1tOOWjHAmCjVql/l+NwpPM8jVEs7anNUj3OQI2xsredZU8/gM3f+M7XA57zV5xPaDp7xMxUiSquBFVB1ydiYrnqkeS6WX9hJUsTqM9k2Ihkir7OIV4bZGFtN89ECN1x5M/ff/hD/44cfZGJoght23EAn6vQdwiSf26PC4ycf50+Ovh/jCcYjDrUKiCqjQ2PUKlUeO/kwF665jLHaOAA/3/cA1eERfrHvIX740F0YL5lEq6hVjO8xNj5OKxIwht1mLy1ts9VuYqu/CX8y4PXPei0f/84neMtzf4O1E+uIbIjpkRgon4hMlCILk4sj8JbNhYlrPXvve+9739+n94g7Cz9Du5UnQQPNBpkats7uxGq6ftv1PHD4YT5/zx1cvO4iNq/cTBjFK7Adtvjq/V+h0Wrim4BapUI1qFHxKwRBhVpQo+pVEYEg8Hn06CMYK6ABt//0a3zim5+lWqsChlqtRrVaoRZUqQZVhqvDBFLlzMIST73kCn73119PMOyzJdzEedXNccw8ihgbGmPdijX844/+iadf8DQCv5KYtS6yn/vd++FpcZBgJVVgsntMQtaIolSkT8qVlEgRYtZMcogWOEKSBJt+2XqYTd4GVvmrQGBmeYZ3/98/YPfx3Xzo5e/jV3Y8G6uWpeYSv/HpNzJfn6HiB3geGKOoUTxj8AzxTkm0XTNq0ewsceiw5ZFDddYOjzJaHcL4kjA3YvnieQH1dotWs8PLnv8c3v7SN/DYiUPsHL6AjeMbEiZj/P6RRvjG5wePfJ/Hj+3lP13zYmpjq/ulwyWLVfR9DcmYsaKSQan7xlg+JhRTTGOgsCyPOOdt5515LciooqMoGJ5o72eIGquCVVgsYRSyYmQFf37bH3PJ+h2847Pv5ot339ELMoWdCGxsPoZJTIMIbKjYKI5RtDsRXlTj3c99P6++9te58cJn876Xv5W/e+ufERDQbkdYNaAe1hpOzcyzcmolf/HuP+AtL30V/+tLn+a9H/8rpiqTsblitWeQeOJhbcgNF9/I5uWD/Osnb+HhO/8mU5NLuouwF2pO4XSq2SpFQpGF6MyJlyQ/w1HB262w9SysuT5YaMSwYBeYtvNcVX1KvNUBTzyiKGRyZJIPv/p/8t8+9z/4b1/4IxZbS7z8qluxoRApeDax6U0cATOiRBoPVr1d5xVPfR1Xb3omV296Jq+6on/vx553G3/0pb9m3dAqZucXEODW597Ib932KubOLPFfPvLn/OyX97Jt3WZCGzkCQzEEb9UytnCYhaXTLB9/sBeI0jRGeLZiAuIoxeFkE3a5tukqaFk6coHyXloYrSQr9lB4mA3eWnwTZDKAjPGIbMRobYwPv+aP+eg3/5oP3vGn3Lv7HtQYwkjwjGJMrLBDC55A4BkWG4tsW72Dl1zxCsIo7POzbExSeMsLXsvX7/sBP9t1H9dddRW/edttXLBpI5/52le5/Zvfpq0h46PjtOZaRGHksF60R07Y8rT/zJIV9o9v5eli4hBwkmgjaQ5ZKUk8TyLXzPikA3MZ09bFCpVciDFNRnFHaPuUzIVonmVtsCPY3sN1NEU+7kIjRjze9cK3s358DR/55l8yNFKj6gVE1satERSMAWsgUqXdCnnN015P4AWEUYgRL8Z1TCzMA+Pxtltez86rLuAtL7yN+/Y8whvf/34e23+A0aEhKqGhvtSEFaOIcQOeXV2w/oLnsP6C5/ChL/1P7nni51y97WlEUZhALYO7I0iu6pw7kbUgpnB2CBA0U+5Tcrl+ijqzqLofnbLTjJlRPAkS1moRd+kWM4mikFc/8zYu2ngh7/qX3yeMLL7pK7q4NYJhob7ILZe/nKvOezrtsIXvBSjgETM6WjQ42D7KyqdMcMuFz+P3PvZhfnL/L/ACj/GhYdoL7RgDGvLwR4PyfMRkwYRRB9/4POvi6/j6fd/m6m1PIxPu0zLJUByPLN1DnSEIUwoGimSiWL2KMzkGhaRz2frCkDm7wKRMksPOyFPauwXCrFou2nAhw5VhOmEHjeJYuFVJyAkRhB5XbrkaQeKyFGLw1NC2bY5yhF+aB5iuTPMUuYT67jbfv/vn1CoVvBY059rgGbyJCtTiiGS/aKR7VjzjgcBV513NzOIcZxZO43leX38WdE3X2uqX8XCVG9SSQJ6fycCRrJeZ4RSpOkKzSr7RhwEiYhypQpDB8PsGQLZuWUwaMzTbTcLIohZCsTF5WcHz490RBDU+eMcHuGbrtdy44wZ2bruMxZFlTjNDq9NmeHGMYwdO89/v+xjfePAHjHhVOvNtMAZv1McEJhbzoRTqZ5VNSGQtVb/G1OgKHj70CM++9FmpHHGXy5ezugYYRj2mTFdnqDOHOJ/DoIUart0MHHXUxeyWko40zE5aprRAapt3gTIxWCsxO8T0Gd4SxqSylm0RhZa7jtzD+NYpVtTWcHT+CF/+3ne4+8dPUG+3ODZznEZ9mZHKEIFfQao+UosFQBTGRoRNurl0F4Wz+Jj2w7AAI7UR9pzcl0yGDsjBSMflNOU5SDboqpoDLCRfFi9vFOfbKECxtJv20Nbu5HjiUzVVTuoZ1ujqpJyRRbq8JmuTB/X6MYDu+VHCRDeGyHZoLLcJw5DJiQmuecp1PPvKZ7Jh47kcPHmQz37tMxw5sYuH959m3/EWlUipqGGoMgE1gwx5YIj9k0TviJiEzJALuRYgoyzNphm16NiwPLAmMjDFjpRRpBQCqUmNQicbZ1BDQVdl42zOnogwqZPsMU9wLDzJ+mBtMtix8jGen/CYonitJJfw8Kg3mswtLVCtBIxPTHDlZTt56s7L2bZ1KwZh757H+fL3vszjh/ZgOyEjI1WIqgTtEB+LVAPMUID4sUiyPcpPnM0qGDy8hIuVEi/iyjXUXtGzQ2eOcP7aCwZmZ5UFQzNpZrkKPT29qZnUYynwhlw0k7IyeppbSev9VUyHs+z29rLQXmKdWc2IDOP7PqcO3Ut94TibdzwfMQFYxYrS1g4XbdvB1DkjXHzJhWzZsJkaVfYd2ssXvvxFHtnzKPVmnWqtgjEB7abQmOuwtNTBG/apDFf6TQlsLPZiizcO5arELC6b4Edu47QfOo5sROAH7D62m93HHuftL/jtrFhL6w0tM2/dwSVHsfKUmMoU5dICHtYTU7mkES2xtQNTYad/IY9HBzjKcQ63jjBRW0nl2EmOfuG9dBZPc+K5+5m49haWw2mWpEkYdHjr697A9MI09+2+jx//6E4OHj/CQn0OT8H3qnhaozkbEWkbUxFGJiu0FRrJE/ZKYCTQeRy0Mql4jfTIEWEUEtkojrHnWPW+52OMYWZphnd99g+4ZMNFXHLuDqyNYp+G8i4DrkJgmfHSdKUuzTt9udJV4iJeJS8ikruQu6eGihJ4FS422zk3XMuMP8u8aTMXzaFRi4oPy3YJqFMTnzVmNdXQ592feD+PHngM01LUE6rDQxiGCJsRjXYIApWax9BwhaBqqPggSzGDXFHEM5iUIu1Vak6S7j0xtGyb1UMrWD2xsice8z+NVp0f7f4JH/vuJ4hUefctvxvjq5qrbThgDNKeuIr2PYZcie6uqZygturoEZQt7SMMaFHTs67cjUJ617WKFTi570fU50+waectBN5QJgj8+Z99lf/6j39Mx8BQbYSw1UZUqQSGypBHUDX4QXJFq/gezMx3mJ5VPN8UgixdNW1MzHhfbNVZWpznyh3bec2zX8TU8CQTw2MEXkCr0+To9HEePfYYDx5+mNnGPDddeiPvesHvsHZiTY9Bkl7++bZdxUIW5Pp2ZuzRXmcZVUUiG6mbwJafjFwedBEJcSU8ZViG4qA9asIW6T60Jx4PH9jDB+/4JHcf+AWjBgLfw1QNYrpKOB5cxRJ4MLsQMj1n8Y3JFIHvSh5PDPV6nZaE3HLtjVy//TL2nHmM3Uf3sNRcxmoIJuYIj1RGWDO2ip2bL+GGi3+FyzZemvgbqYlIBd9cXW2KwSMcVmkfPrf9zKVI+xkHuRqFxchgQQFleg/J2SZIu4WcEgvGZIP6QCcKCbyAMwuzXP17t3LOsMdytEx1eJihoJoUgowvYwQ8X5hb6DA7F+F7XgyHJ6LW8zxaNmJ2YY4rNmxny7o1/NVv/hFTI1MpcdSgGbawagm8gNHqSKYmlrVRIZ9xUKU6LeUtZ6GlPind9tIdjCNbkvKq+kX3RvNdahNafmY2Cja5Abx+e7jU9X0T0AlDVo5P8ZT1O1g1tpn3veI9eBowszjX4ytZa2Oic4oU1nW0YivKcHp+FqPKH73q7fzDOz7I9dsvZ3xojHbYIbIRijJUHWJqZJJzRlcwPjQWp5KpJbJRMvGShF3TxG93y6J0VKfQg5ZiY9/88Bpw6R9X77686cfAOoRlpVfRfmJ+39ZOMyz60MR7bnsTP93/EL9y8TP4wjv/nuddegOziwss1esxUQDp0Su7Is8zwlKrzvTCLC966rP4zvv+jnfe8gbu2fMAT7/kGjzj4xnTI8XFnFuLtTYh2MW73YjBYHJ0pPIy4oPL5hUbwrjWeCymtE91l/KtMNjDzCXpZ8KROdGlaVDRhdckwKFnPF78x7+JZzy+9J6/AuC79/+Ij379k+w5vZfx4XFqns/MTIPlBlhjmV2e57KN2/n9l7+ZW659HgB7jjzGd+67k7fe8sYUBJ4TnWXYUfodpGSR5Tp1uiZK899JegfZrgIPtUgwePKTUfqAJfls4rDUXF5+1/vdffQJrnjbrXzpD/6K5z/12QDUW3X+6cef41M/+GeWW4tIu8qhY9NMjI3xtpf8Z972wtcxXB2m3Wni+wF/+Jk/5z/d9B85f/15WI3iGMjZJqJUNeQzt1LWUUnHNE2JrqIz2O96nEyGFhW4myRSktUsg/vWPeldlq1XEtk4w/W/f+aj/N13P8ejn/wGY7URjAjG+Ow9vp+/+Pbf8LX7fsw1G67kfa9+K5dsughQGq0GQ9VhPvP927Eor7/xNsKoX+6oAAw+iXCyK+Oqb4Ror1RTvy11GaqRrrPSrzeVFP9ykW8kF9fILybJ1ALIl3Po57AVB9tdwxBHN/qkbofA9e9+NZWKz48++C+A0mw3qVWGAGX30Se4aMP5ALTDDqBU/Ao/ePAnfPf+O/nAa9+NWpuIp1yP2FxBsmxNjwErMe9lOVa9ezLyhV9sPw+x3060pOpz2UXSjkuunmumYIOrRWim16YWtnTeRxERTi9M88w/eC0XrN/E/3vnxxiu1OhEbVQjKv4QnbCDVUs1qAJwx13f4uv3fo+/eOP7GKkOp7KOUg5qplul5nTdgB3jmiMtZxQWRHBmMrqOHy4/w3HXQp54zsBVzYRjewF73Gz1Qh1FZyyh/6dNVvXphRle8qHfZHpuho+84T286JqbCnc4PnuKD3/pb5lenOdjb3ov40NjicNmcK4PBvxR1uCvxBnOdkmmyKvKd1JOrEqbZFOlPHBxVvB2sQopiCbNa7Pcln8SP4WSSdnfrSqe8YhsyAf+78f522/eztZNm7l+xxVsnFxFs9HisRMHObk0wwuvfCZvvvk1idNmi1G8gvGjzg7d+SimDJqgAYKgyBQhM3Y9a8raSNU5GTIYEi4sonRCiLtitNJ3CiVTwU2ehBXT5WMpiMfM0hw/eOjn7Dq6l7mFGUaDIa7YdinPveKZjA7FCTZkEFsXryhVCQLKs+szVldZZ2dNhVnVMTYpAZ4rZ9dlFKa6BDgZ0A7HRgdEs9LFS/pKXBAHhd7mmuiWdAxJdkxcMNKgCJENCfygdJN1wg6e8VJ9klx5d5rhz8Th1ThhJ10fMT2ZWZ5TbqJKrMd8R4KixZIBCp/cZGRX/wCTT6X3YnFET7FRlITADVHYjOk1XjXWUqZvGlqr2R2WLNkYK0qo/bYTB6S6xGqETqcZH2oMgV/pA3CRja+vyaBKX5/1S6V27+E73yiOX3Srf4YxIK9RHDJOyn0bKYn0SbbUkeZ3i3ZzA7tl8QpcWS0NmGiOEJLtTNw3J7oP31w+ifGrVKqTvevsf/ALGK/CtstfiWpEY/kErcYcw6PrCCqjqEZx5RxJt1iY5fgTP2f15isZGllNqzkHGOqLx5k//ThbLn5R79j64jE67TpjU1vwUrun1wC9l+uX/Tl9+D7arXmm1u6g3VhkZGIds6f2s/rcy2i35mksnWLinAuS87yewyap3unlAaZUURzNAVmp83pUnaKl5DSqBpeAS+54+tDPmT25l7Azz+jUZpoLZ1CBDdtvAOIEyuMHfsrC6T10GnPMHH2AnTe8i/FV2zmw60tsufSlLJ7Zy6Fd32bzzpfieR0e/cnH8SrvZGqN8vjdn2H1lqfTWDjCoYe/wYo1F3Lk0R+yYtOVTB+6k7kTj3P+Va/m1MEHOHfH8wDLyMR6PN8wffwRRifOZXnuMMavcPrQL5hadR7qV2ksnWT23l8yd3oflz7rrdQXjnHokUMceegLbNj5EqIwIvB9DjzwVdZufzarzr08iSyaEgMhT+3MU0KzP/5ZPc183p44KgCIxMTgJOVs77/9DSvPezpoxNyRe5g+cj9+dZKoeYq5kw9jFVaddyPNucPUF45RrQ3Rapxm30O7Wbv5Ch758Ufp1GdZOPUIE6vPp7N4mMCELJ7ZR3PucZbOPMrw6BTTRx5kZHSMXT/8CJ3mPK32NB4hvgd7fvq3oA0mVm/i1MF72Xzpi/E85Yl7PsvqTVcyfeQBRqY2MXbOVvbd8/dMbryWqNMG20C0DaKcOXwvqzZeiuf5EHY49ug3sK0FZk88iFSqrDr3inh3qBkk3bP9zUspytKt+PxkcIyiD9n/WHvs7ekTDxJGHVqNZYKhCRZPPk5t4jyM8agvnKZSm6QTQm10DWf2/5jRyS0MT20iqI4zvf8LaPMUp/f/nOrouVRGzmV85SbqlYDK+Hksn34Yv1Ll3EteyLFH/xUwVMbXsnLzNey/9zPMHLyblZufyeSGqwmCCkce/BeM8Vm9+Wp2/fCj1EZXAsKJA/exeuOlLM8fZ376EJhhFk7swoYRoyvPY+XW6zF+jfrMHg4tHGdkYhuV2jgzB35GMH4u1fFNnLPhMgqtfwpFWvJ9YjXFWNZicpi1kUY20vT/439Wrdr4/8k/1e4/VavZ76MoVFXV/Q9/Vb/9D6/Q4/vvUquqkY0/1+Ss7k8YNfX+n3xMm83Z3mfH9/9Y7/32H+r89OOqybmRRmo1UlXV+vKM/vJH/0uXFk8m37c10lCtqt733Q/o9LEHkrtE2mov6T3ffK8uzBxUVdWTR+7So/t+olZVd/38H/ThOz+iJw/8VCMbahg1eu/Wvdfc9BN6//f/RKOwoaqqBx/5uh5+5Cu9+6pqasysFv/T3vj03z31efc3G2kUdTSMOtpz+kq9b6fTJ6UWgtUOxx66gw4VNl/6kp7F4HVL4vWyiTw0rGPFIFIp1LrtWTFqidQm8QuIok5sHRnTs4CsbWNMJfk+ThPwDCBB8n0TY6o9hmBc3U0QvN67RDbqxTHigsMRXqqoff+5Oollp4lXLzlInBKXIBe0TkX6NKkybQb1tXZ/3i+5oM50Y5+l9U9n42W3YozBeB6e5zPfnMcYiYM7ns/J+TMcWZjH84YwxqMdNnnw0MOcXjiTWD2GU/OnmK8v4Rmfw2eOxiUovADP9zFimGvMcXzuJMZUODB9lNnlmTjdzAtohREPHtpFvbWMMTUWGgs8evwxQtvGmCBhKVkOTB/izNJMUv/QEGqbheYCXgKzi8JsfY49J57AaogxAcZ4vSzYcrJSSXRUtcBY7Bo/EtlIxakRpITmnu6RkVrJSTDou4/+hONzJ6j5PntOHGTF+BS+FzDXnKVGjU6nzbqpNdQqVe4/spvz12zh9OxJXnT5c/jp7l/gBz71doNGu44KjNTGsRrSajeot+psmFpHB8v21Zs5Mn+K6cUF3nj9K3jH7X/I+slVrBmPS6Y2ozZHpo+ybmwNeMJiWGeiMkw77DBeHWWuucwN25/GNx74Po2wxUXrzyeKIo7MHsZ4HuPVSYYqVcaqIxyYOQgWJkcmGQqqnFqc4frzr+K6bVdlca/SuJPLP+sCprYXNvbPxmYopNC4GoCn/lw1Osnx+RN4no+ijNWGGK4OM1ypcHJ2hmbUYuX4FBeuPZ9QlSOzR1FVtqzcRHi+5djcCWZb8xw8vcRQpcZYbYiK53NgepGtqzdiVbj30IMEXsC5k+u5//BjPHFmH5dvuJDh4RHmGktxtR2Uras3sVxfIgojtq3YhBHh6NxJZpZn2bhiA1FkuXbLFaycmuLE/BlOLZxhzfgaqoHPqYVZfOPR8lqcv2ozM0vzNMMOjXaDjVNr6ISds2wDcdbRLoQZ0iBjX2fk4ry5KgkDg0g5QKzZaVALhp5U+Kwbees6UIrt5dSZLhShafaX5f/c+xUu23AJl6y7gDDqoBoR+LXM9TpRm8BL9Eivh0a/dCmu6k6F7BeJE2Y8z+kUq3uEKfLQiv0Ms5G+xCmMuwRIrne1C7QVJ5U9Zpj3c5vValw4JVtb1Om/9C6Vzo8Q7VVgdlPvI0T8DCIbH5vkUicFg7sNtwpAa7pmgNDrEejs6Z4oaR1A5ewjtZIKJRTFflmORi64FKmT/Cv5QKEUuKGSy0co1WSFJ3G1JS0GZtJWR5qrpV0+bc4RzXOFhfIiqWXVA7P2f7b9kTqvW6SEi4NEXawIrSkU25ZVYitTHeq4kfST1cmhzFpcPVIgyms5KqZaYOxJl0ZjvJ7S7LMUyUyO5IrDa2bvi/MxoXheegmKFN+/aGtmqw9qoQGWFJZ3929TZINKIS6c5jQVK6YXWbdltkChK5GWsbXOEk9WzZX8znY0yONCQr5LUaq3eSr8meEKp1B2LfB3U/VTMnUOBfJFW9QdZshcMtk1fhlSUt7QO/1OJVXUtQjMaAm7UFyBHEffwP7LD3gmddfhLZS9zg+rOuj7ueqkku/JVKAfFcdAnaBhjgvc1ffqbCfqhtHTec1uT1NSLXzyyl8zK6qULKquFtBObphjAtNzkJX6rvfrWoZaEjZVRwlnLSkJWOiJoWUMEc1UG0pPlAqpbmRnCSylLWYtiWb1jCcp40eVYf5l2zmdiOAmiBW7DJfTLLPkMS2HewacV2ZNpaOc+WAc4Ai3FiWI/6TceBkU96ZgTbgJDAMwm9zKzns67u+10DfS2ZfbyYfNVrZxVQxyT4RkC0JyNlqnqxJCWXpZ0mi323OijPKuhYifOPozZYuBu+qJ9Xvx5fhXueZRmtMWSNH6yFCECvB13ElZnZOrAyYpG3sYpERlYJmKokyRTAfFXN5rtzFbVipJOUsrXadV3aVX02x5ddhH3QfKl/PWfA+O7neaL7JUtJdFivKlH90sGrgZCysT8FHH4kqbo6lzJGURZaw/VwFmSaUGZAsaSI6E4Wsu6OGcZsmbrUqxV6mD8uic3qI4yKampXiKIg5j0lV9VwpQdzHJ0bWb1UFqze8jdzPJwXIku4czNalyIaZMPWA3d1EKfoazsy75vP9Bm1syA59NT88PcjpHMOvrijO2XKwtTuG+Lgun2BfM/dTqfO/0QnFNS6FMR266809mBpm1aXHqqtNarPVd3qDEgXKV6B3J6QrIt27OihXJOHyqWhiitAWVdzSzclucOlBLlpcWnOVyV7iICRU3gZ9vFJtnnYszfOKI9Emepac50LdPfhNHC1eXDSQuZZ5ZgOI0KZ31zzRbeKsnaBRn5ZusqBHyBeazhxaLGqBpY0CcE5kdBO2atmXmmrviTC+1XdyBqIxgSVlOmU52UgToSDVHz+dQCWkkPa8QhHRX4+xzaK4bDDnHVYpAYwFMKSH1OUw5TVGWXDqqp2PTq7iLw9kEtS0ERrSsNEWZ71PEpDK1q3Jcf7fYs0/mRhRrjKda4kq+1WkeNz/LtfXsMZiB5zkp7uX85V4/qphr24l9cUk1PdMUkOwG+h3XdccKJeeclbV7z4gTKcLovbyKXJRAVLLV9p1WnebIy5LtA+6C+Ls0UNFsYC2/iFTzqStnmdhcHCpdNKZf1/YseV//jl1y1vMLuAm4chyKfrbrHCmUOznrik5n7Eu/34eUZsXok98lzuPU7XNl1IHw/wETW6kr+Gr7PQAAAABJRU5ErkJggg==";
+  var TITLE    = "CTRP Virtual Lab";
+  var SUBTITLE = document.title || "";
+  function apply() {
+    if (document.querySelector(".ctrp-header") == null) {
+      var h = document.createElement("header");
+      h.className = "ctrp-header";
+      h.innerHTML =
+        (LOGO ? '<img class="ctrp-logo" src="' + LOGO + '" alt="CTRP">' : '') +
+        '<div class="ctrp-title-block">' +
+          '<h1 class="ctrp-title">' + TITLE + '</h1>' +
+          (SUBTITLE ? '<div class="ctrp-subtitle">' + SUBTITLE + '</div>' : '') +
+        '</div>';
+      document.body.insertBefore(h, document.body.firstChild);
+    }
+    if (document.querySelector(".ctrp-footer") == null) {
+      var f = document.createElement("footer");
+      f.className = "ctrp-footer";
+      f.innerHTML =
+        "&copy; " + new Date().getFullYear() +
+        " &nbsp;Developed by Eslam Taha &nbsp;|&nbsp; " +
+        "Center for Training &amp; Radiation Protection (CTRP) &nbsp;|&nbsp; " +
+        "King Abdulaziz University, Jeddah";
+      document.body.appendChild(f);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+<!-- CTRP-THEME-END -->
+
+<script>
+// ============================================================
+//  SHIELDING TACTICS — RP card battle (MVP)
+// ============================================================
+var COLS = 3, MAX_HP = 60, HAND_CAP = 8, START_HAND = 5;
+var LEAK_OWNER = 3, LEAK_SELF = 1, CRIT_DMG = 10, CONTAM_DMG = 2;
+
+// Card templates
+var SRC = {
+  alpha: { stype:'alpha', dmg:8, hl:2, ic:'α', nm:'Alpha Source', cls:'src-a' },
+  beta:  { stype:'beta',  dmg:4, hl:3, ic:'β', nm:'Beta Source',  cls:'src-b' },
+  gamma: { stype:'gamma', dmg:5, hl:5, ic:'γ', nm:'Gamma Source', cls:'src-g' }
+};
+
+// Damage that PASSES through (front,back) shields. Keys: char f + '_' + char b ; n/l/h
+var BETA_TBL  = { n_n:1, l_h:0,   l_n:.25, n_l:.3, h_n:.8, n_h:.8, l_l:.12, h_h:0,   h_l:.2 };
+var GAMMA_TBL = { n_n:1, h_h:0,   h_n:.5,  n_h:.5, l_n:.85,n_l:.85,l_l:.7,  h_l:.35, l_h:.35 };
+
+function shChar(t) { return !t ? 'n' : (t.sz === 'low' ? 'l' : 'h'); }
+
+function passMult(stype, front, back) {
+  if (stype === 'alpha') return (front || back) ? 0 : 1;   // any shield stops alpha
+  var key = shChar(front) + '_' + shChar(back);
+  var m = (stype === 'beta' ? BETA_TBL : GAMMA_TBL)[key];
+  if (m === undefined) m = 1;
+  if (front) m *= (front.upMult || 1);                     // upgrade + RSO absorption
+  if (back)  m *= (back.upMult || 1);
+  return m;
+}
+
+// Effective shield at a defensive tile: combines a Shield Upgrade and any
+// adjacent RSO boost (each = ×0.5 of the damage that passes). RSO/empty
+// tiles are not shields and let radiation straight through.
+function effShield(who, line, col) {
+  var t = who.board[line][col];
+  if (!t || t.kind !== 'shield') return null;
+  var up = t.upgraded ? 0.5 : 1;
+  var boost = rsoBoosts(who, line, col) ? 0.5 : 1;
+  return { sz: t.sz, upMult: up * boost };
+}
+
+// Is an RSO adjacent to this defensive tile? (same line ±1 col, or the other
+// defensive line in the same column)
+function rsoBoosts(who, line, col) {
+  var b = who.board, other = (line === 'front') ? 'back' : 'front';
+  // a contaminated RSO loses effectiveness — unless it has PPE
+  function isRSO(l, c) {
+    if (!(c >= 0 && c < COLS && b[l][c] && b[l][c].kind === 'rso')) return false;
+    var key = l + '_' + c;
+    return !(who.contam && who.contam[key]) || (who.ppe && who.ppe[key]);
+  }
+  return isRSO(line, col - 1) || isRSO(line, col + 1) || isRSO(other, col);
+}
+
+// ============================================================
+//  DECK / STATE
+// ============================================================
+function makeCard(kind, sub) { return { kind:kind, sub:sub, uid: Math.random() }; }
+function buildDeck() {
+  var d = [];
+  function add(n, kind, sub) { for (var i = 0; i < n; i++) d.push(makeCard(kind, sub)); }
+  add(3,'source','alpha'); add(3,'source','beta'); add(3,'source','gamma');
+  add(4,'shield','low');   add(4,'shield','high'); add(2,'upgrade',null);
+  add(1,'rso',null);       add(1,'reactor',null);
+  add(2,'distance',null);  add(1,'sabotage',null); add(1,'criticality',null);
+  add(1,'contam',null);    add(1,'waste',null);    add(1,'decon',null); add(1,'emergency',null);
+  add(1,'crack',null);     add(1,'survey',null);   add(1,'ppe',null);
+  // shuffle
+  for (var i = d.length - 1; i > 0; i--) { var j = Math.floor(Math.random()*(i+1)); var t=d[i]; d[i]=d[j]; d[j]=t; }
+  return d;
+}
+function emptyBoard() { return { off:[null,null,null], front:[null,null,null], back:[null,null,null] }; }
+
+var P, A, turnSide, selUid = null, busy = false;
+
+function newSide() {
+  return { hp:MAX_HP, deck:buildDeck(), hand:[], board:emptyBoard(),
+           distance:false, emergency:false, crit:0, contam:{}, ppe:{} };
+}
+function newGame() {
+  P = newSide(); A = newSide();
+  for (var i = 0; i < START_HAND; i++) { draw(P); draw(A); }
+  selUid = null; busy = false;
+  document.getElementById('log').innerHTML = '';
+  log('Battle begins. Place shields to defend, sources to attack.', 'sys');
+  turnSide = 'player';
+  startTurn('player', true);
+}
+
+function draw(who) { if (who.deck.length && who.hand.length < HAND_CAP) who.hand.push(who.deck.pop()); }
+
+// ============================================================
+//  TURN FLOW
+// ============================================================
+function startTurn(side, first) {
+  busy = true;
+  var me = side === 'player' ? P : A;
+  var foe = side === 'player' ? A : P;
+
+  if (!first) {
+    fireSources(side, me, foe);
+    processLeaks(side, me, foe);
+    processContamination(side, me);
+  }
+  processReactors(side, me);
+  if (processCriticality(side, me)) return;
+  if (checkWin()) return;
+
+  draw(me);
+  render();
+
+  if (side === 'player') {
+    busy = false;
+    setTurnInfo('Your Turn — play one card or pass');
+  } else {
+    setTurnInfo('Opponent thinking…');
+    setTimeout(aiTurn, 750);
+  }
+}
+
+function fireSources(side, me, foe) {
+  for (var c = 0; c < COLS; c++) {
+    var s = me.board.off[c];
+    if (!s || s.kind !== 'source') continue;
+    var mult = passMult(s.stype, effShield(foe,'front',c), effShield(foe,'back',c));
+    var dmg = Math.round(s.dmg * mult);
+    if (foe.distance && dmg > 0) dmg = Math.round(dmg * 0.5);   // inverse-square distance
+    var who = side === 'player' ? 'Your' : 'Enemy';
+    if (dmg <= 0) {
+      log(who + ' ' + s.ic + ' was fully blocked in column ' + (c+1) + '.', 'blk');
+    } else {
+      foe.hp = Math.max(0, foe.hp - dmg);
+      var blocked = s.dmg - dmg;
+      log(who + ' ' + s.ic + ' hits column ' + (c+1) + ' for ' + dmg + (blocked>0 ? ' ('+blocked+' shielded)' : '') + '.', side==='player'?'blk':'hit');
+    }
+    s.timer--;
+    if (s.timer <= 0) { me.board.off[c] = null; log(who + ' ' + s.ic + ' decayed away.', 'sys'); }
+  }
+  if (foe.distance) { foe.distance = false; log((side==='ai'?'Your':'Enemy') + ' distance (inverse-square) absorbed this volley.', 'blk'); }
+}
+
+function endPlayerTurn() {
+  if (busy) return;
+  selUid = null; busy = true;
+  render();
+  startTurn('ai');
+}
+
+// Reactor: every 2 of the owner's turns it produces a bonus random card.
+function processReactors(side, me) {
+  for (var c = 0; c < COLS; c++) {
+    var t = me.board.off[c];
+    if (t && t.kind === 'reactor' && !t.critical) {
+      t.turns = (t.turns || 0) + 1;
+      if (t.turns % 2 === 0 && me.hand.length < HAND_CAP) {
+        me.hand.push(randomCard());
+        log((side === 'player' ? 'Your' : 'Enemy') + ' reactor produced a bonus card.', 'sys');
+      }
+    }
+  }
+}
+function randomCard() {
+  var pool = [['source','alpha'],['source','beta'],['source','gamma'],['shield','low'],['shield','high'],['upgrade',null]];
+  var p = pool[Math.floor(Math.random() * pool.length)];
+  return makeCard(p[0], p[1]);
+}
+function cardLabel(card) {
+  if (card.kind === 'source')  return SRC[card.sub].nm;
+  if (card.kind === 'shield')  return (card.sub === 'low' ? 'Low-Z' : 'High-Z') + ' Shield';
+  if (card.kind === 'upgrade') return 'a Shield Upgrade';
+  if (card.kind === 'rso')     return 'an RSO';
+  if (card.kind === 'reactor') return 'a Reactor';
+  if (card.kind === 'distance')    return 'Inverse-Square (Distance)';
+  if (card.kind === 'sabotage')    return 'Sabotage';
+  if (card.kind === 'criticality') return 'Criticality Accident';
+  if (card.kind === 'contam')      return 'an Unsealed Source';
+  if (card.kind === 'waste')       return 'Waste Disposal';
+  if (card.kind === 'decon')       return 'Decontamination';
+  if (card.kind === 'emergency')   return 'an Emergency Plan';
+  if (card.kind === 'crack')       return 'Crack (shield damage)';
+  if (card.kind === 'survey')      return 'a Survey Meter';
+  if (card.kind === 'ppe')         return 'PPE';
+  return 'a card';
+}
+
+// Sabotaged sources leak each owner-turn: hurt the owner, nick the saboteur.
+function processLeaks(side, me, foe) {
+  for (var c = 0; c < COLS; c++) {
+    var s = me.board.off[c];
+    if (s && s.kind === 'source' && s.leaking) {
+      var od = me.emergency ? Math.round(LEAK_OWNER * 0.5) : LEAK_OWNER;
+      me.hp = Math.max(0, me.hp - od);
+      foe.hp = Math.max(0, foe.hp - LEAK_SELF);
+      log((side==='player'?'Your':'Enemy') + ' ' + s.ic + ' leaks (sabotaged): -' + od + ' to owner, -' + LEAK_SELF + ' to the other side.', 'hit');
+    }
+  }
+}
+
+// Contaminated tiles irradiate their owner each turn.
+function processContamination(side, me) {
+  var n = 0, k;
+  for (k in me.contam) if (me.contam[k] && !me.ppe[k]) n++;   // PPE shields that tile
+  if (n > 0) {
+    var d = n * CONTAM_DMG;
+    me.hp = Math.max(0, me.hp - d);
+    log((side==='player'?'You take':'Enemy takes') + ' ' + d + ' from contamination (' + n + ' tile' + (n>1?'s':'') + ').', 'hit');
+  }
+}
+
+// Criticality meltdown countdown. Returns true if the game ended.
+function processCriticality(side, me) {
+  if (me.crit > 0) {
+    me.crit--;
+    if (me.crit === 0) {
+      log((side==='player'?'Your':'Enemy') + ' reactor went critical — MELTDOWN!', 'hit');
+      endGame(side !== 'player');
+      return true;
+    }
+    log((side==='player'?'Your':'Enemy') + ' reactor criticality: ' + me.crit + ' turn(s) to meltdown!', 'hit');
+  }
+  return false;
+}
+
+// ============================================================
+//  PLAYING CARDS
+// ============================================================
+function legalSlots(card, who) {
+  // returns array of {line,col}
+  var out = [];
+  var b = who.board, c;
+  if (card.kind === 'source' || card.kind === 'reactor') {
+    for (c = 0; c < COLS; c++) if (!b.off[c]) out.push({line:'off', col:c});
+  } else if (card.kind === 'shield' || card.kind === 'rso') {
+    for (c = 0; c < COLS; c++) { if (!b.front[c]) out.push({line:'front', col:c}); if (!b.back[c]) out.push({line:'back', col:c}); }
+  } else if (card.kind === 'upgrade') {
+    for (c = 0; c < COLS; c++) {
+      if (b.front[c] && b.front[c].kind === 'shield' && !b.front[c].upgraded) out.push({line:'front', col:c});
+      if (b.back[c]  && b.back[c].kind === 'shield' && !b.back[c].upgraded)  out.push({line:'back', col:c});
+    }
+  }
+  return out;
+}
+
+function placeCard(who, card, slot) {
+  var b = who.board;
+  if (card.kind === 'source') {
+    var t = SRC[card.sub];
+    b.off[slot.col] = { kind:'source', stype:t.stype, dmg:t.dmg, timer:t.hl, ic:t.ic, nm:t.nm, cls:t.cls };
+  } else if (card.kind === 'reactor') {
+    b.off[slot.col] = { kind:'reactor', turns:0 };
+  } else if (card.kind === 'shield') {
+    b[slot.line][slot.col] = { kind:'shield', sz:card.sub, upgraded:false };
+  } else if (card.kind === 'rso') {
+    b[slot.line][slot.col] = { kind:'rso' };
+  } else if (card.kind === 'upgrade') {
+    b[slot.line][slot.col].upgraded = true;
+  }
+  // remove from hand
+  for (var i = 0; i < who.hand.length; i++) if (who.hand[i].uid === card.uid) { who.hand.splice(i,1); break; }
+}
+
+function playerPlay(card, slot) {
+  if (busy) return;
+  placeCard(P, card, slot);
+  log('You played ' + cardLabel(card) + '.', 'sys');
+  endPlayerTurn();
+}
+
+// ============================================================
+//  AI  (greedy 1-ply heuristic)
+// ============================================================
+function evalBoards() {
+  // expected one-volley damage each way through current shields
+  var incoming = 0, outgoing = 0, c;
+  for (c = 0; c < COLS; c++) {
+    var ps = P.board.off[c];
+    if (ps && ps.kind === 'source') incoming += Math.round(ps.dmg * passMult(ps.stype, effShield(A,'front',c), effShield(A,'back',c)));
+    var as = A.board.off[c];
+    if (as && as.kind === 'source') outgoing += Math.round(as.dmg * passMult(as.stype, effShield(P,'front',c), effShield(P,'back',c)));
+  }
+  return { incoming:incoming, outgoing:outgoing };
+}
+
+function aiTurn() {
+  // Hazards / counters first (the greedy shield-damage eval can't see them).
+  var sp = aiChooseSpecial();
+  if (sp) {
+    applyEffect(A, P, sp.card, sp.target);
+    log('Opponent played ' + cardLabel(sp.card) + '.', 'sys');
+    render();
+    if (checkWin()) return;
+    setTimeout(function(){ startTurn('player'); }, 650);
+    return;
+  }
+
+  var best = null, bestScore = -1e9;
+  var base = evalBoards();
+  var baseScore = base.outgoing - base.incoming * 1.3;
+
+  for (var i = 0; i < A.hand.length; i++) {
+    var card = A.hand[i];
+    var slots = legalSlots(card, A);
+    for (var s = 0; s < slots.length; s++) {
+      var slot = slots[s];
+      var snap = snapshot(A.board);
+      placeTrial(A.board, card, slot);
+      var e = evalBoards();
+      // small nudges: value keeping pressure (sources) and not over-stacking
+      var score = e.outgoing - e.incoming * 1.3;
+      if (card.kind === 'source') score += 0.4;          // tie-break toward attacking
+      else if (card.kind === 'reactor') score += 0.6;    // value card advantage
+      restore(A.board, snap);
+      if (score > bestScore) { bestScore = score; best = { card:card, slot:slot }; }
+    }
+  }
+
+  if (best && bestScore >= baseScore - 0.01) {
+    placeCard(A, best.card, best.slot);
+    log('Opponent played ' + cardLabel(best.card) + '.', 'sys');
+  } else {
+    log('Opponent passed.', 'sys');
+  }
+  render();
+  setTimeout(function(){ startTurn('player'); }, 650);
+}
+
+// AI use of action/hazard/counter cards (simple priority list)
+function aiChooseSpecial() {
+  function find(kind) { for (var i=0;i<A.hand.length;i++) if (A.hand[i].kind===kind) return A.hand[i]; return null; }
+  var card, t;
+  // self-repair first
+  card = find('waste'); if (card) { t = legalTargets(card, A, P); if (t.length) return {card:card, target:t[0]}; }
+  card = find('decon'); if (card) { t = legalTargets(card, A, P); if (t.length) return {card:card, target:t[0]}; }
+  card = find('emergency'); if (card && !A.emergency && (A.crit > 0 || A.hp <= 28)) return {card:card, target:{self:true}};
+  // PPE its own RSO if it is contaminated
+  card = find('ppe'); if (card) {
+    t = legalTargets(card, A, P);
+    for (var pi=0; pi<t.length; pi++) { var pk=t[pi].line+'_'+t[pi].col; if (A.contam[pk]) return {card:card, target:t[pi]}; }
+  }
+  // offense: criticality on a player reactor
+  card = find('criticality'); if (card) { t = legalTargets(card, A, P); if (t.length) return {card:card, target:t[0]}; }
+  // sabotage the player's strongest source
+  card = find('sabotage'); if (card) {
+    t = legalTargets(card, A, P);
+    if (t.length) { var best=t[0], bd=-1; for (var i=0;i<t.length;i++){ var s=P.board.off[t[i].col]; if (s && s.dmg>bd){bd=s.dmg;best=t[i];} } return {card:card, target:best}; }
+  }
+  // contaminate the player's RSO, else a shield, else anything
+  card = find('contam'); if (card) {
+    t = legalTargets(card, A, P);
+    var pick=null, i, tile;
+    for (i=0;i<t.length;i++){ tile=P.board[t[i].line][t[i].col]; if (tile && tile.kind==='rso'){ pick=t[i]; break; } }
+    if (!pick) for (i=0;i<t.length;i++){ tile=P.board[t[i].line][t[i].col]; if (tile && tile.kind==='shield'){ pick=t[i]; break; } }
+    if (!pick && t.length) pick=t[0];
+    if (pick) return {card:card, target:pick};
+  }
+  // crack the player's best shield (prefer upgraded High-Z, then High-Z)
+  card = find('crack'); if (card) {
+    t = legalTargets(card, A, P);
+    if (t.length) {
+      var cpick = null, ci, ctile;
+      for (ci=0;ci<t.length;ci++){ ctile=P.board[t[ci].line][t[ci].col]; if (ctile.sz==='high' && ctile.upgraded){ cpick=t[ci]; break; } }
+      if (!cpick) for (ci=0;ci<t.length;ci++){ ctile=P.board[t[ci].line][t[ci].col]; if (ctile.sz==='high'){ cpick=t[ci]; break; } }
+      if (!cpick) cpick=t[0];
+      return {card:card, target:cpick};
+    }
+  }
+  // distance if a heavy volley is incoming
+  card = find('distance'); if (card && !A.distance) { var e=evalBoards(); if (e.incoming >= 6) return {card:card, target:{self:true}}; }
+  // survey meter — low priority, just to use it
+  card = find('survey'); if (card) { t = legalTargets(card, A, P); if (t.length) return {card:card, target:t[0]}; }
+  return null;
+}
+
+// trial helpers for AI (shallow board edits)
+function snapshot(b) { return JSON.parse(JSON.stringify(b)); }
+function restore(b, snap) { b.off = snap.off; b.front = snap.front; b.back = snap.back; }
+function placeTrial(b, card, slot) {
+  if (card.kind === 'source') { var t = SRC[card.sub]; b.off[slot.col] = { kind:'source', stype:t.stype, dmg:t.dmg, timer:t.hl, ic:t.ic }; }
+  else if (card.kind === 'reactor') { b.off[slot.col] = { kind:'reactor', turns:0 }; }
+  else if (card.kind === 'shield') { b[slot.line][slot.col] = { kind:'shield', sz:card.sub, upgraded:false }; }
+  else if (card.kind === 'rso') { b[slot.line][slot.col] = { kind:'rso' }; }
+  else if (card.kind === 'upgrade') { b[slot.line][slot.col].upgraded = true; }
+}
+
+// ============================================================
+//  WIN
+// ============================================================
+function endGame(playerWon) {
+  render();
+  document.getElementById('end-title').textContent = playerWon ? 'Victory!' : 'Defeat';
+  document.getElementById('end-title').style.color = playerWon ? '#69f0ae' : '#ff8a80';
+  document.getElementById('end-msg').textContent = playerWon
+    ? 'You kept your dose below the limit and beat the opponent. Shielding mastered!'
+    : 'You lost — watch the incoming sources, build the right combos, and answer hazards in time.';
+  document.getElementById('end').classList.add('show');
+  busy = true;
+}
+function checkWin() {
+  if (A.hp <= 0 || P.hp <= 0) { endGame(A.hp <= 0 && P.hp > 0); return true; }
+  return false;
+}
+
+// ============================================================
+//  TARGETING & EFFECTS (actions, hazards, counters)
+// ============================================================
+function legalTargets(card, me, foe) {
+  var meSide = (me === P) ? 'pl' : 'ai';
+  var foeSide = (foe === P) ? 'pl' : 'ai';
+  var out = [], c, all = ['off','front','back'], li, k, pp, s;
+  switch (card.kind) {
+    case 'source': case 'reactor':
+      for (c=0;c<COLS;c++) if (!me.board.off[c]) out.push({side:meSide,line:'off',col:c});
+      break;
+    case 'shield': case 'rso':
+      for (c=0;c<COLS;c++) { if (!me.board.front[c]) out.push({side:meSide,line:'front',col:c}); if (!me.board.back[c]) out.push({side:meSide,line:'back',col:c}); }
+      break;
+    case 'upgrade':
+      for (c=0;c<COLS;c++) {
+        if (me.board.front[c] && me.board.front[c].kind==='shield' && !me.board.front[c].upgraded) out.push({side:meSide,line:'front',col:c});
+        if (me.board.back[c]  && me.board.back[c].kind==='shield'  && !me.board.back[c].upgraded)  out.push({side:meSide,line:'back',col:c});
+      }
+      break;
+    case 'distance': case 'emergency':
+      out.push({self:true});
+      break;
+    case 'sabotage':
+      for (c=0;c<COLS;c++) { s=foe.board.off[c]; if (s && s.kind==='source' && !s.leaking) out.push({side:foeSide,line:'off',col:c}); }
+      break;
+    case 'criticality':
+      for (c=0;c<COLS;c++) { s=foe.board.off[c]; if (s && s.kind==='reactor') out.push({side:foeSide,line:'off',col:c}); }
+      break;
+    case 'contam':
+      for (li=0;li<all.length;li++) for (c=0;c<COLS;c++) if (!foe.contam[all[li]+'_'+c]) out.push({side:foeSide,line:all[li],col:c});
+      break;
+    case 'waste':
+      for (c=0;c<COLS;c++) { s=me.board.off[c]; if (s && s.kind==='source' && s.leaking) out.push({side:meSide,line:'off',col:c}); }
+      break;
+    case 'decon':
+      for (k in me.contam) if (me.contam[k]) { pp=k.split('_'); out.push({side:meSide,line:pp[0],col:+pp[1]}); }
+      break;
+    case 'crack':
+      for (li=0;li<2;li++) for (c=0;c<COLS;c++) { var ln=['front','back'][li]; if (foe.board[ln][c] && foe.board[ln][c].kind==='shield') out.push({side:foeSide,line:ln,col:c}); }
+      break;
+    case 'survey':
+      if (foe.hand.length) out.push({self:true});
+      break;
+    case 'ppe':
+      for (li=0;li<all.length;li++) for (c=0;c<COLS;c++) if (me.board[all[li]][c] && !me.ppe[all[li]+'_'+c]) out.push({side:meSide,line:all[li],col:c});
+      break;
+  }
+  return out;
+}
+
+function applyEffect(me, foe, card, target) {
+  switch (card.kind) {
+    case 'source': case 'reactor': case 'shield': case 'rso': case 'upgrade':
+      placeCard(me, card, {line:target.line, col:target.col});
+      return;   // placeCard already discards from hand
+    case 'distance':  me.distance = true; break;
+    case 'emergency': me.emergency = true; break;
+    case 'sabotage':  foe.board.off[target.col].leaking = true; break;
+    case 'criticality':
+      var dmg = foe.emergency ? Math.round(CRIT_DMG * 0.5) : CRIT_DMG;
+      foe.hp = Math.max(0, foe.hp - dmg);
+      foe.crit = foe.emergency ? 4 : 2;
+      foe.board.off[target.col].critical = true;   // reactor stays, but is going critical
+      break;
+    case 'contam': foe.contam[target.line + '_' + target.col] = true; break;
+    case 'waste':  me.board.off[target.col] = null; break;   // remove leaking source
+    case 'decon':  delete me.contam[target.line + '_' + target.col]; break;
+    case 'crack':
+      var sh = foe.board[target.line][target.col];
+      if (sh && sh.kind === 'shield') {
+        if (sh.sz === 'high') { sh.sz = 'low'; sh.upgraded = false; }   // High-Z cracks down to Low-Z
+        else { foe.board[target.line][target.col] = null; }            // Low-Z shatters
+      }
+      break;
+    case 'survey':
+      if (foe.hand.length) {
+        var rc = foe.hand[Math.floor(Math.random() * foe.hand.length)];
+        log('Survey Meter — opponent is holding: ' + cardLabel(rc) + '.', 'blk');
+      }
+      break;
+    case 'ppe': me.ppe[target.line + '_' + target.col] = true; break;
+  }
+  for (var i=0;i<me.hand.length;i++) if (me.hand[i].uid === card.uid) { me.hand.splice(i,1); break; }
+}
+
+function resolvePlayerPlay(card, target) {
+  if (busy) return;
+  applyEffect(P, A, card, target);
+  log('You played ' + cardLabel(card) + '.', 'sys');
+  selUid = null;
+  if (checkWin()) { render(); return; }
+  endPlayerTurn();
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function tileHTML(side, line, col) {
+  var who = side === 'ai' ? A : P;
+  var obj = who.board[line][col];
+  var cls = 'tile', inner = '', badge = '', up = '';
+  if (obj) {
+    if (line === 'off') {
+      if (obj.kind === 'reactor') {
+        cls += ' reactor-tile';
+        if (obj.critical) {
+          cls += ' melting';
+          inner = '<div class="ic">🏭</div><div class="nm">MELTDOWN</div>';
+          badge = '<div class="badge" style="color:#ff5252">' + who.crit + '</div>';
+        } else {
+          inner = '<div class="ic">🏭</div><div class="nm">Reactor</div>';
+          badge = '<div class="badge">' + (2 - (obj.turns % 2)) + '</div>';
+        }
+      } else {
+        cls += ' ' + (obj.cls || ('src-' + obj.stype.charAt(0)));
+        if (obj.leaking) cls += ' leaking';
+        inner = '<div class="ic">' + obj.ic + '</div><div class="nm">HL ' + obj.timer + '</div>';
+        badge = '<div class="badge">' + obj.dmg + '</div>';
+        if (obj.leaking) up += '<div class="leak">LEAK</div>';
+      }
+    } else if (obj.kind === 'rso') {
+      cls += ' rso-tile';
+      inner = '<div class="ic">🧑‍🔬</div><div class="nm">RSO</div>';
+    } else {
+      cls += obj.sz === 'low' ? ' sh-l' : ' sh-h';
+      inner = '<div class="ic">' + (obj.sz === 'low' ? '🧴' : '🧱') + '</div><div class="nm">' + (obj.sz === 'low' ? 'Low-Z' : 'High-Z') + '</div>';
+      if (obj.upgraded) up += '<div class="up">▲2×</div>';
+      if (rsoBoosts(who, line, col)) up += '<div class="boost">RSO</div>';
+    }
+  }
+  // contamination / PPE overlays (either side)
+  var contamMark = '';
+  if (who.contam && who.contam[line + '_' + col]) { cls += ' contaminated'; contamMark += '<div class="contam">☣</div>'; }
+  if (who.ppe && who.ppe[line + '_' + col]) { cls += ' ppe-tile'; contamMark += '<div class="ppe-m">🥽</div>'; }
+  // legality — any legal target of the selected card (own OR enemy board)
+  if (selUid) {
+    var card = findHand(P, selUid);
+    if (card) {
+      var ts = legalTargets(card, P, A);
+      for (var k = 0; k < ts.length; k++) if (!ts[k].self && ts[k].side === side && ts[k].line === line && ts[k].col === col) { cls += ' legal'; break; }
+    }
+  }
+  return '<div class="' + cls + '" data-side="' + side + '" data-line="' + line + '" data-col="' + col + '">' + up + badge + inner + contamMark + '</div>';
+}
+
+function rowHTML(side, line, label) {
+  var h = '<div class="row"><div class="row-lbl">' + label + '</div>';
+  for (var c = 0; c < COLS; c++) h += tileHTML(side, line, c);
+  return h + '</div>';
+}
+
+function render() {
+  // AI board: Offensive (top), Back, Front (front nearest center)
+  document.getElementById('ai-board').innerHTML =
+    rowHTML('ai','off','Offensive') + rowHTML('ai','back','Back Shield') + rowHTML('ai','front','Front Shield');
+  // Player board: Front (nearest center), Back, Offensive (bottom)
+  document.getElementById('pl-board').innerHTML =
+    rowHTML('pl','front','Front Shield') + rowHTML('pl','back','Back Shield') + rowHTML('pl','off','Offensive');
+
+  // health
+  setHP('ai', A); setHP('pl', P);
+  // hand
+  renderHand();
+  updateSelfPlay();
+  bindTiles();
+}
+
+function setHP(side, who) {
+  var pct = Math.max(0, who.hp / MAX_HP * 100);
+  var hb = document.getElementById(side + '-hb');
+  hb.querySelector('.fill').style.width = pct + '%';
+  var extra = '';
+  if (who.crit > 0)   extra += '  ⚠meltdown ' + who.crit;
+  if (who.emergency)  extra += '  🛡EP';
+  if (who.distance)   extra += '  ↔dist';
+  document.getElementById(side + '-hp').textContent = (side === 'ai' ? 'Opponent' : 'You') + '  ' + who.hp + ' / ' + MAX_HP + extra;
+}
+
+function updateSelfPlay() {
+  var btn = document.getElementById('self-play'), show = false, label = '';
+  if (selUid) {
+    var card = findHand(P, selUid);
+    if (card) { var ts = legalTargets(card, P, A); if (ts.length && ts[0].self) { show = true; label = 'Play ' + cardLabel(card); } }
+  }
+  btn.style.display = show ? 'block' : 'none';
+  btn.textContent = label;
+}
+
+function cardFace(card) {
+  if (card.kind === 'source') { var t = SRC[card.sub]; return { ic:t.ic, nm:t.nm, st:'DMG ' + t.dmg + ' · HL ' + t.hl, cls:t.cls }; }
+  if (card.kind === 'shield') return card.sub === 'low'
+    ? { ic:'🧴', nm:'Low-Z Shield', st:'Beats β · breaks α', cls:'sh-l' }
+    : { ic:'🧱', nm:'High-Z Shield', st:'Beats γ · stops α', cls:'sh-h' };
+  if (card.kind === 'rso')     return { ic:'🧑‍🔬', nm:'RSO', st:'Boosts nearby shields', cls:'' };
+  if (card.kind === 'reactor') return { ic:'🏭', nm:'Reactor', st:'+1 card / 2 turns', cls:'' };
+  if (card.kind === 'distance')    return { ic:'↔', nm:'Inverse-Square', st:'Halve next volley', cls:'' };
+  if (card.kind === 'sabotage')    return { ic:'☣', nm:'Sabotage', st:'Leak enemy source', cls:'' };
+  if (card.kind === 'criticality') return { ic:'☢', nm:'Criticality', st:'Hit enemy reactor', cls:'' };
+  if (card.kind === 'contam')      return { ic:'🧫', nm:'Unsealed Source', st:'Contaminate a tile', cls:'' };
+  if (card.kind === 'waste')       return { ic:'🗑️', nm:'Waste Disposal', st:'Remove a leak', cls:'' };
+  if (card.kind === 'decon')       return { ic:'🧼', nm:'Decontaminate', st:'Clear contamination', cls:'' };
+  if (card.kind === 'emergency')   return { ic:'🛡️', nm:'Emergency Plan', st:'Halve crit/sabotage', cls:'' };
+  if (card.kind === 'crack')       return { ic:'🔨', nm:'Crack', st:'High-Z→Low-Z, Low-Z→gone', cls:'' };
+  if (card.kind === 'survey')      return { ic:'📟', nm:'Survey Meter', st:'Reveal an enemy card', cls:'' };
+  if (card.kind === 'ppe')         return { ic:'🥽', nm:'PPE', st:'Shield a unit from contam.', cls:'' };
+  return { ic:'▲', nm:'Shield Upgrade', st:'2× a shield', cls:'' };
+}
+
+function renderHand() {
+  var h = '';
+  for (var i = 0; i < P.hand.length; i++) {
+    var card = P.hand[i], f = cardFace(card);
+    var sel = card.uid === selUid ? ' sel' : '';
+    h += '<div class="card' + sel + '" data-uid="' + card.uid + '">' +
+         '<div class="cic">' + f.ic + '</div><div class="cnm">' + f.nm + '</div><div class="cst">' + f.st + '</div></div>';
+  }
+  document.getElementById('hand').innerHTML = h;
+  var cards = document.querySelectorAll('#hand .card');
+  for (var k = 0; k < cards.length; k++) cards[k].addEventListener('click', function() {
+    if (busy) return;
+    var uid = parseFloat(this.getAttribute('data-uid'));
+    selUid = (selUid === uid) ? null : uid;
+    render();
+  });
+}
+
+function bindTiles() {
+  var tiles = document.querySelectorAll('.tile.legal');
+  for (var i = 0; i < tiles.length; i++) tiles[i].addEventListener('click', function() {
+    if (busy || !selUid) return;
+    var card = findHand(P, selUid); if (!card) return;
+    resolvePlayerPlay(card, {
+      side: this.getAttribute('data-side'),
+      line: this.getAttribute('data-line'),
+      col:  parseInt(this.getAttribute('data-col'), 10)
+    });
+  });
+}
+
+function findHand(who, uid) { for (var i=0;i<who.hand.length;i++) if (who.hand[i].uid===uid) return who.hand[i]; return null; }
+function setTurnInfo(t) { document.getElementById('turn-info').textContent = t; }
+function log(msg, cls) {
+  var el = document.getElementById('log');
+  el.innerHTML += '<div class="' + (cls||'') + '">' + msg + '</div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+// ============================================================
+//  BUTTONS / BOOT
+// ============================================================
+document.getElementById('self-play').addEventListener('click', function() {
+  if (busy || !selUid) return;
+  var card = findHand(P, selUid); if (!card) return;
+  resolvePlayerPlay(card, { self:true });
+});
+document.getElementById('pass-btn').addEventListener('click', function() {
+  if (busy) return;
+  log('You passed.', 'sys');
+  endPlayerTurn();
+});
+document.getElementById('intro-btn').addEventListener('click', function() {
+  document.getElementById('intro').classList.remove('show');
+  newGame();
+});
+document.getElementById('end-btn').addEventListener('click', function() {
+  document.getElementById('end').classList.remove('show');
+  newGame();
+});
+</script>
+</body>
+</html>
